@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, StatusBar, SafeAreaView, Imag
 import { useRouter } from "expo-router"
 import { LinearGradient } from "expo-linear-gradient"
 import { useState } from "react"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 
 const { width, height } = Dimensions.get("window")
 
@@ -29,6 +30,8 @@ export default function LoginScreen() {
       const data = await response.json()
 
       if (response.ok) {
+        // Store userId in AsyncStorage
+        await AsyncStorage.setItem("userId", data.userId.toString())
         setModalVisible(true)
       } else {
         Alert.alert("Error", data.error || "Something went wrong")

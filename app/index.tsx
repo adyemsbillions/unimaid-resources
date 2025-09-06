@@ -1,16 +1,80 @@
 "use client"
-import { View, Text, TouchableOpacity, StyleSheet, StatusBar, SafeAreaView, Image, Dimensions } from "react-native"
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar, SafeAreaView, Image, Dimensions, Animated, Alert, ActivityIndicator } from "react-native"
 import { useRouter } from "expo-router"
 import { LinearGradient } from "expo-linear-gradient"
+import { useEffect, useState, useRef } from "react"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 
 const { width, height } = Dimensions.get("window")
+const BASE_URL = "http://192.168.50.38/unimaidresourcesquiz/"
 
 export default function OnboardingScreen() {
   const router = useRouter()
+  const [images, setImages] = useState([])
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
+  const fadeAnim = useRef(new Animated.Value(1)).current
 
-  const handleStartQuiz = () => {
-    router.push("/quiz")
-    console.log("Start Quiz pressed, navigating to /quiz")
+  useEffect(() => {
+    const fetchImages = async () => {
+      try {
+        setIsLoading(true)
+        const response = await fetch(`${BASE_URL}api/get_slide_images.php`)
+        const data = await response.json()
+        if (response.ok && Array.isArray(data)) {
+          const formattedImages = data.map(item => ({
+            id: item.id,
+            image_url: `${BASE_URL}api/uploads/${item.image_url.startsWith('uploads/') ? item.image_url.replace('uploads/', '') : item.image_url}`
+          }))
+          setImages(formattedImages)
+          // Preload images for smoother transitions
+          formattedImages.forEach(image => Image.prefetch(image.image_url))
+        } else {
+          console.error("Error fetching images:", data.error || "Invalid response")
+          Alert.alert("Error", data.error || "Failed to fetch images")
+          setImages([])
+        }
+      } catch (error) {
+        console.error("Network error fetching images:", error)
+        Alert.alert("Error", "Network error occurred while fetching images")
+        setImages([])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchImages()
+  }, [])
+
+  useEffect(() => {
+    if (images.length === 0) return
+
+    const interval = setInterval(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 1000,
+        useNativeDriver: true,
+      }).start(() => {
+        // Select a random index, ensuring it's different from the current index
+        let newIndex
+        do {
+          newIndex = Math.floor(Math.random() * images.length)
+        } while (newIndex === currentImageIndex && images.length > 1)
+        
+        setCurrentImageIndex(newIndex)
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }).start()
+      })
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [images, fadeAnim, currentImageIndex])
+
+  const handleGetStarted = () => {
+    router.push("/dashboard")
+    console.log("Get Started pressed, navigating to /dashboard")
   }
 
   const handleSignup = () => {
@@ -27,15 +91,29 @@ export default function OnboardingScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      {/* Background Image with Enhanced Overlay */}
+      {/* Background Image with Fade Effect */}
       <View style={styles.backgroundContainer}>
-        <Image
-          source={{
-            uri: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1350&q=80",
-          }}
-          style={styles.backgroundImage}
-          resizeMode="cover"
-        />
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#8B5CF6" />
+            <Text style={styles.loadingText}>Loading images...</Text>
+          </View>
+        ) : images.length > 0 ? (
+          <Animated.Image
+            source={{ uri: images[currentImageIndex].image_url }}
+            style={[styles.backgroundImage, { opacity: fadeAnim }]}
+            resizeMode="cover"
+            onError={() => Alert.alert("Error", "Failed to load image")}
+          />
+        ) : (
+          <Image
+            source={{
+              uri: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1350&q=80",
+            }}
+            style={styles.backgroundImage}
+            resizeMode="cover"
+          />
+        )}
         <LinearGradient
           colors={["rgba(0,0,0,0.3)", "rgba(0,0,0,0.7)", "rgba(0,0,0,0.9)"]}
           style={styles.gradientOverlay}
@@ -58,9 +136,9 @@ export default function OnboardingScreen() {
           </View>
 
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.primaryButton} onPress={handleStartQuiz} activeOpacity={0.9}>
+            <TouchableOpacity style={styles.primaryButton} onPress={handleGetStarted} activeOpacity={0.9}>
               <LinearGradient colors={["#8B5CF6", "#7C3AED"]} style={styles.gradientButton}>
-                <Text style={styles.primaryButtonText}>Start Quiz</Text>
+                <Text style={styles.primaryButtonText}>Get Started</Text>
               </LinearGradient>
             </TouchableOpacity>
 
@@ -75,15 +153,6 @@ export default function OnboardingScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
-        </View>
-
-        {/* Bottom Indicator */}
-        <View style={styles.bottomIndicator}>
-          <View style={styles.indicatorDots}>
-            <View style={[styles.dot, styles.activeDot]} />
-            <View style={styles.dot} />
-            <View style={styles.dot} />
           </View>
         </View>
       </View>
@@ -109,6 +178,17 @@ const styles = StyleSheet.create({
   },
   gradientOverlay: {
     ...StyleSheet.absoluteFillObject,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#000",
+  },
+  loadingText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    marginTop: 10,
   },
   content: {
     flex: 1,
@@ -228,23 +308,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     letterSpacing: 0.3,
-  },
-  bottomIndicator: {
-    alignItems: "center",
-    marginTop: 20,
-  },
-  indicatorDots: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-  },
-  activeDot: {
-    backgroundColor: "#8B5CF6",
-    width: 24,
   },
 })

@@ -1,7 +1,13 @@
+"use client"
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, SafeAreaView, StatusBar } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
+import { useRouter } from "expo-router"
+import { useEffect } from "react"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 
 const Dashboard = () => {
+  const router = useRouter()
+
   const topAuthors = [
     { id: 1, name: "Rayford", avatar: "https://i.pravatar.cc/100?img=1" },
     { id: 2, name: "Willard", avatar: "https://i.pravatar.cc/100?img=2" },
@@ -13,6 +19,31 @@ const Dashboard = () => {
     id: i + 1,
     avatar: `https://i.pravatar.cc/60?img=${i + 10}`,
   }))
+
+  useEffect(() => {
+    const checkLoginStatus = async () => {
+      try {
+        const userId = await AsyncStorage.getItem("userId")
+        if (!userId) {
+          console.log("No user logged in, navigating to /login")
+          router.replace("/login")
+        }
+      } catch (error) {
+        console.error("Error checking login status:", error)
+      }
+    }
+    checkLoginStatus()
+  }, [router])
+
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.removeItem("userId")
+      console.log("User logged out, navigating to /")
+      router.replace("/")
+    } catch (error) {
+      console.error("Logout error:", error)
+    }
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -26,10 +57,10 @@ const Dashboard = () => {
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.iconButton}>
-            <Ionicons name="search-outline" size={24} color="#666" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton}>
             <Ionicons name="notifications-outline" size={24} color="#666" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={24} color="#666" />
           </TouchableOpacity>
         </View>
       </View>
