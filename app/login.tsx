@@ -1,5 +1,5 @@
 "use client"
-import { View, Text, TouchableOpacity, StyleSheet, StatusBar, SafeAreaView, Image, Dimensions, TextInput, ScrollView } from "react-native"
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar, SafeAreaView, Image, Dimensions, TextInput, ScrollView, Modal, Alert } from "react-native"
 import { useRouter } from "expo-router"
 import { LinearGradient } from "expo-linear-gradient"
 import { useState } from "react"
@@ -11,10 +11,32 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [modalVisible, setModalVisible] = useState(false)
 
-  const handleLogin = () => {
-    console.log("Login attempted with:", { email, password })
-    router.push("/dashboard")
+  const handleLogin = async () => {
+    try {
+      const response = await fetch("http://192.168.50.38/unimaidresourcesquiz/api/login.php", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setModalVisible(true)
+      } else {
+        Alert.alert("Error", data.error || "Something went wrong")
+      }
+    } catch (error) {
+      Alert.alert("Error", "Network error occurred")
+      console.error("Login error:", error)
+    }
   }
 
   const handleSignup = () => {
@@ -24,6 +46,11 @@ export default function LoginScreen() {
 
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword)
+  }
+
+  const handleModalClose = () => {
+    setModalVisible(false)
+    router.push("/dashboard")
   }
 
   return (
@@ -101,6 +128,27 @@ export default function LoginScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Success Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={handleModalClose}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <LinearGradient colors={["#8B5CF6", "#7C3AED"]} style={styles.modalGradient}>
+              <Text style={styles.modalIcon}>✅</Text>
+              <Text style={styles.modalTitle}>Login Successful!</Text>
+              <Text style={styles.modalMessage}>You're ready to continue your quiz journey.</Text>
+              <TouchableOpacity style={styles.modalButton} onPress={handleModalClose}>
+                <Text style={styles.modalButtonText}>Go to Dashboard</Text>
+              </TouchableOpacity>
+            </LinearGradient>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -257,5 +305,52 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     letterSpacing: 0.3,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+  },
+  modalContainer: {
+    width: width * 0.85,
+    borderRadius: 20,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  modalGradient: {
+    padding: 24,
+    alignItems: "center",
+  },
+  modalIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 12,
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: "rgba(255, 255, 255, 0.9)",
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  modalButton: {
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#8B5CF6",
   },
 })
