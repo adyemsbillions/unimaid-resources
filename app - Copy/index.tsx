@@ -46,15 +46,17 @@ export default function OnboardingScreen() {
         {/* Logo/Brand Area */}
         <View style={styles.brandContainer}>
           <View style={styles.logoPlaceholder}>
-            <Text style={styles.logoText}>Unimaid Resources</Text>
+            <Text style={styles.logoText}>FluentWave</Text>
           </View>
         </View>
 
         {/* Main Content Area */}
         <View style={styles.mainContent}>
           <View style={styles.textContainer}>
-            <Text style={styles.mainText}>Start Your Quiz</Text>
-            <Text style={styles.subText}>Engage with fun quizzes and test your skills!</Text>
+            <Text style={styles.mainText}>Your Quiz Journey{"\n"}Starts Here</Text>
+            <Text style={styles.subText}>
+              Test your skills with engaging quizzes and{"\n"}conquer every challenge that comes your way
+            </Text>
           </View>
 
           <View style={styles.buttonContainer}>
@@ -114,12 +116,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "space-between",
     paddingHorizontal: 24,
-    paddingTop: 100,
+    paddingTop: 120,
     paddingBottom: 40,
   },
   brandContainer: {
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 10,
   },
   logoPlaceholder: {
     backgroundColor: "rgba(139, 92, 246, 0.2)",
@@ -143,23 +145,23 @@ const styles = StyleSheet.create({
   },
   textContainer: {
     alignItems: "center",
-    marginBottom: 40,
+    marginBottom: 60,
     paddingHorizontal: 20,
   },
   mainText: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: "800",
     color: "#FFFFFF",
     textAlign: "center",
-    marginBottom: 12,
-    lineHeight: 38,
+    marginBottom: 16,
+    lineHeight: 42,
     letterSpacing: -0.5,
   },
   subText: {
-    fontSize: 14,
+    fontSize: 16,
     color: "rgba(255, 255, 255, 0.8)",
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 24,
     letterSpacing: 0.2,
   },
   buttonContainer: {
