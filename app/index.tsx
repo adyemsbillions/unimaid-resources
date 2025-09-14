@@ -6,7 +6,7 @@ import { useEffect, useState, useRef } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
 const { width, height } = Dimensions.get("window")
-const BASE_URL = "http://192.168.50.38/unimaidresourcesquiz/"
+const BASE_URL = "http://192.168.156.38/unimaidresourcesquiz/"
 
 export default function OnboardingScreen() {
   const router = useRouter()
@@ -14,7 +14,7 @@ export default function OnboardingScreen() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const fadeAnim = useRef(new Animated.Value(1)).current
-
+  
   useEffect(() => {
     const fetchImages = async () => {
       try {

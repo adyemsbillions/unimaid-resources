@@ -2,11 +2,12 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, SafeAreaView, StatusBar } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
-import { useEffect } from "react"
-import AsyncStorage from "@react-native-async-storage/async-storage"
+import { useState, useEffect } from "react"
 
 const Dashboard = () => {
   const router = useRouter()
+  const [username, setUsername] = useState("Guest")
+  const [quizzes, setQuizzes] = useState([])
 
   const topAuthors = [
     { id: 1, name: "Rayford", avatar: "https://i.pravatar.cc/100?img=1" },
@@ -21,35 +22,48 @@ const Dashboard = () => {
   }))
 
   useEffect(() => {
-    const checkLoginStatus = async () => {
+    const fetchData = async () => {
       try {
-        const userId = await AsyncStorage.getItem("userId")
-        if (!userId) {
-          console.log("No user logged in, navigating to /login")
-          router.replace("/login")
-        }
+        const userResponse = await fetch("http://192.168.156.38/unimaidresourcesquiz/api/get_user.php", {
+          credentials: "include"
+        })
+        const userData = await userResponse.json()
+        setUsername(userData.username || "Guest")
+
+        const quizResponse = await fetch("http://192.168.156.38/unimaidresourcesquiz/api/get_quizzes.php")
+        const quizData = await quizResponse.json()
+        setQuizzes(quizData.slice(0, 5))
       } catch (error) {
-        console.error("Error checking login status:", error)
+        console.error("Error fetching data:", error)
       }
     }
-    checkLoginStatus()
-  }, [router])
+    fetchData()
+  }, [])
 
-  const handleLogout = async () => {
-    try {
-      await AsyncStorage.removeItem("userId")
-      console.log("User logged out, navigating to /")
-      router.replace("/")
-    } catch (error) {
-      console.error("Logout error:", error)
-    }
+  const handleProfile = () => {
+    router.push("/profile")
+    console.log("Profile pressed, navigating to /profile")
+  }
+
+  const handleSearch = () => {
+    router.push("/search")
+    console.log("Search pressed, navigating to /search")
+  }
+
+  const handleLibrary = () => {
+    router.push("/library")
+    console.log("Library pressed, navigating to /library")
+  }
+
+  const handleViewAllQuizzes = () => {
+    router.push("/allquiz")
+    console.log("View all quizzes pressed, navigating to /allquiz")
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Ionicons name="search-outline" size={24} color="#6B46C1" />
@@ -59,14 +73,10 @@ const Dashboard = () => {
           <TouchableOpacity style={styles.iconButton}>
             <Ionicons name="notifications-outline" size={24} color="#666" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={24} color="#666" />
-          </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Play Quiz Section */}
         <View style={styles.playQuizSection}>
           <View style={styles.playQuizContent}>
             <Text style={styles.playQuizTitle}>Play quiz together with{"\n"}your friends</Text>
@@ -80,7 +90,7 @@ const Dashboard = () => {
             </View>
 
             <TouchableOpacity style={styles.findFriendsButton}>
-              <Text style={styles.findFriendsText}>Find Friends</Text>
+              <Text style={styles.findFriendsText}>Hello {username}</Text>
             </TouchableOpacity>
           </View>
 
@@ -89,7 +99,6 @@ const Dashboard = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Discover Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Discover</Text>
@@ -106,7 +115,7 @@ const Dashboard = () => {
               <Text style={styles.cardTitle}>Get Smarter with{"\n"}Productivity Quiz</Text>
               <View style={styles.cardFooter}>
                 <Image source={{ uri: "https://i.pravatar.cc/30?img=5" }} style={styles.cardAvatar} />
-                <Text style={styles.cardAuthor}>Alex Johnson</Text>
+                <Text style={styles.cardAuthor}>Alex Johnson • 2 questions</Text>
               </View>
             </TouchableOpacity>
 
@@ -117,13 +126,12 @@ const Dashboard = () => {
               <Text style={styles.cardTitle}>Great Ideas Come{"\n"}from Brilliant Minds</Text>
               <View style={styles.cardFooter}>
                 <Image source={{ uri: "https://i.pravatar.cc/30?img=6" }} style={styles.cardAvatar} />
-                <Text style={styles.cardAuthor}>Emma Thompson</Text>
+                <Text style={styles.cardAuthor}>Emma Thompson • 0 questions</Text>
               </View>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Top Authors Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Top Authors</Text>
@@ -141,20 +149,43 @@ const Dashboard = () => {
             ))}
           </View>
         </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Quizzes</Text>
+            <TouchableOpacity onPress={handleViewAllQuizzes}>
+              <Text style={styles.viewAllText}>View all →</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.quizCards}>
+            {quizzes.map((quiz) => (
+              <TouchableOpacity key={quiz.id} style={[styles.discoverCard, styles.quizCard]}>
+                <View style={styles.cardIcon}>
+                  <Ionicons name="book" size={24} color="#fff" />
+                </View>
+                <Text style={styles.cardTitle}>{quiz.title}</Text>
+                <View style={styles.cardFooter}>
+                  <Image source={{ uri: `https://i.pravatar.cc/30?img=${quiz.id + 10}` }} style={styles.cardAvatar} />
+                  <Text style={styles.cardAuthor}>{quiz.author_name} • {quiz.num_questions} questions</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
       </ScrollView>
 
-      {/* Bottom Navigation */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem}>
           <Ionicons name="home" size={24} color="#6B46C1" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
+        <TouchableOpacity style={styles.navItem} onPress={handleSearch}>
           <Ionicons name="search-outline" size={24} color="#999" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
+        <TouchableOpacity style={styles.navItem} onPress={handleLibrary}>
           <Ionicons name="bookmark-outline" size={24} color="#999" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
+        <TouchableOpacity style={styles.navItem} onPress={handleProfile}>
           <Ionicons name="person-outline" size={24} color="#999" />
         </TouchableOpacity>
       </View>
@@ -270,8 +301,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 15,
   },
+  quizCards: {
+    flexDirection: "column",
+    gap: 15,
+  },
   discoverCard: {
-    flex: 1,
     borderRadius: 15,
     padding: 15,
     minHeight: 140,
@@ -281,6 +315,10 @@ const styles = StyleSheet.create({
   },
   ideasCard: {
     backgroundColor: "#FEF3C7",
+  },
+  quizCard: {
+    backgroundColor: "#8B5CF6",
+    flex: 1,
   },
   cardIcon: {
     width: 40,
