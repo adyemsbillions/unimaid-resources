@@ -16,7 +16,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     try {
-      const response = await fetch("http://192.168.156.38/unimaidresourcesquiz/api/login.php", {
+      const response = await fetch("http://192.168.218.38/unimaidresourcesquiz/api/login.php", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

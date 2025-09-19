@@ -17,7 +17,7 @@ export default function SignupScreen() {
 
   const handleSignup = async () => {
     try {
-      const response = await fetch("http://192.168.156.38/unimaidresourcesquiz/api/signup.php", {
+      const response = await fetch("http://192.168.218.38/unimaidresourcesquiz/api/signup.php", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

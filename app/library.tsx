@@ -1,40 +1,29 @@
 "use client"
-import { View, Text, StyleSheet, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Image } from "react-native"
+import { View, Text, StyleSheet, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Image, Alert } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
+
+const BASE_URL = "http://192.168.218.38/unimaidresourcesquiz/"
 
 const Library = () => {
   const router = useRouter()
+  const [donors, setDonors] = useState([])
 
-  // Placeholder data for saved quizzes
   const savedQuizzes = [
     { id: 1, title: "Productivity Quiz", author: "Alex Johnson", icon: "bar-chart" },
     { id: 2, title: "General Knowledge Trivia", author: "Sarah Lee", icon: "bulb" },
     { id: 3, title: "Science Challenge", author: "Mark Brown", icon: "flask" },
   ]
-
-  // Placeholder data for donors
-  const donors = [
-    { id: 1, name: "Alice Smith", amount: 5000, avatar: "https://i.pravatar.cc/100?img=8" },
-    { id: 2, name: "Bob Wilson", amount: 10000, avatar: "https://i.pravatar.cc/100?img=9" },
-    { id: 3, name: "Clara Jones", amount: 2500, avatar: "https://i.pravatar.cc/100?img=10" },
-  ]
-
-  // Placeholder data for handouts
   const handouts = [
     { id: 1, title: "Study Guide: Productivity 101", type: "PDF" },
     { id: 2, title: "Science Notes", type: "PDF" },
   ]
-
-  // Placeholder data for loans
   const loans = [
     { id: 1, title: "Student Loan", amount: 20000, term: "12 months" },
     { id: 2, title: "Education Support Loan", amount: 50000, term: "24 months" },
   ]
-
-  // Placeholder data for downloads
   const downloads = [
     { id: 1, title: "Productivity Quiz Results", type: "PDF" },
     { id: 2, title: "Science Notes", type: "PDF" },
@@ -50,9 +39,33 @@ const Library = () => {
         }
       } catch (error) {
         console.error("Error checking login status:", error)
+        Alert.alert("Error", "Failed to check login status")
       }
     }
     checkLoginStatus()
+
+    const fetchDonors = async () => {
+      try {
+        const response = await fetch(`${BASE_URL}api/get_donors.php`)
+        const responseText = await response.text()
+        console.log("Donors API Response:", responseText)
+        try {
+          const data = JSON.parse(responseText)
+          if (data.success) {
+            setDonors(data.donors)
+          } else {
+            Alert.alert("Error", data.error || "Failed to fetch donors")
+          }
+        } catch (e) {
+          console.error("Donors JSON Parse Error:", e)
+          Alert.alert("Error", "Invalid donors response from server")
+        }
+      } catch (error) {
+        console.error("Error fetching donors:", error)
+        Alert.alert("Error", "Failed to fetch donors")
+      }
+    }
+    fetchDonors()
   }, [router])
 
   const handleBack = () => {
@@ -67,6 +80,7 @@ const Library = () => {
       router.replace("/")
     } catch (error) {
       console.error("Logout error:", error)
+      Alert.alert("Error", "Failed to log out")
     }
   }
 
@@ -79,7 +93,6 @@ const Library = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.iconButton} onPress={handleBack}>
           <Ionicons name="arrow-back-outline" size={24} color="#666" />
@@ -91,7 +104,6 @@ const Library = () => {
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Donate Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Support Us</Text>
@@ -103,20 +115,23 @@ const Library = () => {
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.donorScroll}
-            snapToInterval={150 + 20} // Card width + margin
+            snapToInterval={150 + 20}
             decelerationRate="fast"
           >
-            {donors.map((donor) => (
-              <View key={donor.id} style={styles.donorCard}>
-                <Image source={{ uri: donor.avatar }} style={styles.donorAvatar} />
-                <Text style={styles.donorName}>{donor.name}</Text>
-                <Text style={styles.donorAmount}>₦{donor.amount.toLocaleString()}</Text>
-              </View>
-            ))}
+            {donors.length > 0 ? (
+              donors.map((donor) => (
+                <View key={donor.id} style={styles.donorCard}>
+                  <Image source={{ uri: donor.image }} style={styles.donorAvatar} />
+                  <Text style={styles.donorName}>{donor.name}</Text>
+                  <Text style={styles.donorAmount}>₦{donor.amount.toLocaleString()}</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.emptyText}>No donors yet.</Text>
+            )}
           </ScrollView>
         </View>
 
-        {/* Handouts Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Handouts</Text>
           <View style={styles.itemContainer}>
@@ -138,7 +153,6 @@ const Library = () => {
           </View>
         </View>
 
-        {/* Quiz Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Saved Quizzes</Text>
           <View style={styles.itemContainer}>
@@ -161,7 +175,6 @@ const Library = () => {
           </View>
         </View>
 
-        {/* Take a Loan Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Take a Loan</Text>
           <View style={styles.itemContainer}>
@@ -183,7 +196,6 @@ const Library = () => {
           </View>
         </View>
 
-        {/* My Downloads Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>My Downloads</Text>
           <View style={styles.itemContainer}>

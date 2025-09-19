@@ -1,13 +1,17 @@
 "use client"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, SafeAreaView, StatusBar } from "react-native"
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, SafeAreaView, StatusBar, Alert } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useState, useEffect } from "react"
+import AsyncStorage from "@react-native-async-storage/async-storage"
+
+const BASE_URL = "http://192.168.218.38/unimaidresourcesquiz/"
 
 const Dashboard = () => {
   const router = useRouter()
   const [username, setUsername] = useState("Guest")
   const [quizzes, setQuizzes] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
 
   const topAuthors = [
     { id: 1, name: "Rayford", avatar: "https://i.pravatar.cc/100?img=1" },
@@ -24,21 +28,66 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const userResponse = await fetch("http://192.168.156.38/unimaidresourcesquiz/api/get_user.php", {
-          credentials: "include"
-        })
-        const userData = await userResponse.json()
-        setUsername(userData.username || "Guest")
+        const userId = await AsyncStorage.getItem("userId")
+        if (!userId) {
+          console.log("No user logged in, navigating to /login")
+          router.replace("/login")
+          return
+        }
 
-        const quizResponse = await fetch("http://192.168.156.38/unimaidresourcesquiz/api/get_quizzes.php")
-        const quizData = await quizResponse.json()
-        setQuizzes(quizData.slice(0, 5))
+        // Fetch user data
+        const userResponse = await fetch(`${BASE_URL}api/get_user.php`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ userId }),
+        })
+        const userText = await userResponse.text()
+        console.log("User API Response:", userText)
+        let userData
+        try {
+          userData = JSON.parse(userText)
+        } catch (jsonError) {
+          console.error("User JSON Parse error:", jsonError)
+          throw new Error("Invalid JSON response from user API")
+        }
+
+        if (userResponse.ok && userData.success) {
+          setUsername(userData.username || "Guest")
+        } else {
+          Alert.alert("Error", userData.error || "Failed to fetch user data")
+          router.replace("/login")
+          return
+        }
+
+        // Fetch quizzes
+        const quizResponse = await fetch(`${BASE_URL}api/get_quizzes.php`)
+        const quizText = await quizResponse.text()
+        console.log("Quiz API Response:", quizText)
+        let quizData
+        try {
+          quizData = JSON.parse(quizText)
+        } catch (jsonError) {
+          console.error("Quiz JSON Parse error:", jsonError)
+          throw new Error("Invalid JSON response from quiz API")
+        }
+
+        if (quizResponse.ok && Array.isArray(quizData)) {
+          setQuizzes(quizData.slice(0, 5))
+        } else {
+          Alert.alert("Error", "Failed to fetch quizzes")
+          setQuizzes([])
+        }
       } catch (error) {
         console.error("Error fetching data:", error)
+        Alert.alert("Error", `Network error occurred: ${error.message}`)
+      } finally {
+        setIsLoading(false)
       }
     }
     fetchData()
-  }, [])
+  }, [router])
 
   const handleProfile = () => {
     router.push("/profile")
@@ -77,102 +126,114 @@ const Dashboard = () => {
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.playQuizSection}>
-          <View style={styles.playQuizContent}>
-            <Text style={styles.playQuizTitle}>Play quiz together with{"\n"}your friends</Text>
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
+        ) : (
+          <>
+            <View style={styles.playQuizSection}>
+              <View style={styles.playQuizContent}>
+                <Text style={styles.playQuizTitle}>Play quiz together with{"\n"}your friends</Text>
 
-            <View style={styles.friendsContainer}>
-              {friendAvatars.map((friend, index) => (
-                <View key={friend.id} style={[styles.friendAvatar, { zIndex: friendAvatars.length - index }]}>
-                  <Image source={{ uri: friend.avatar }} style={styles.friendImage} />
+                <View style={styles.friendsContainer}>
+                  {friendAvatars.map((friend, index) => (
+                    <View key={friend.id} style={[styles.friendAvatar, { zIndex: friendAvatars.length - index }]}>
+                      <Image source={{ uri: friend.avatar }} style={styles.friendImage} />
+                    </View>
+                  ))}
                 </View>
-              ))}
+
+                <TouchableOpacity style={styles.findFriendsButton}>
+                  <Text style={styles.findFriendsText}>Hello {username}</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity style={styles.playButton}>
+                <Ionicons name="play" size={24} color="#fff" />
+              </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.findFriendsButton}>
-              <Text style={styles.findFriendsText}>Hello {username}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity style={styles.playButton}>
-            <Ionicons name="play" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Discover</Text>
-            <TouchableOpacity>
-              <Text style={styles.viewAllText}>View all →</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.discoverCards}>
-            <TouchableOpacity style={[styles.discoverCard, styles.productivityCard]}>
-              <View style={styles.cardIcon}>
-                <Ionicons name="bar-chart" size={24} color="#fff" />
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Discover</Text>
+                <TouchableOpacity>
+                  <Text style={styles.viewAllText}>View all →</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.cardTitle}>Get Smarter with{"\n"}Productivity Quiz</Text>
-              <View style={styles.cardFooter}>
-                <Image source={{ uri: "https://i.pravatar.cc/30?img=5" }} style={styles.cardAvatar} />
-                <Text style={styles.cardAuthor}>Alex Johnson • 2 questions</Text>
+
+              <View style={styles.discoverCards}>
+                <TouchableOpacity style={[styles.discoverCard, styles.productivityCard]}>
+                  <View style={styles.cardIcon}>
+                    <Ionicons name="bar-chart" size={24} color="#fff" />
+                  </View>
+                  <Text style={styles.cardTitle}>Get Smarter with{"\n"}Productivity Quiz</Text>
+                  <View style={styles.cardFooter}>
+                    <Image source={{ uri: "https://i.pravatar.cc/30?img=5" }} style={styles.cardAvatar} />
+                    <Text style={styles.cardAuthor}>Alex Johnson • 2 questions</Text>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.discoverCard, styles.ideasCard]}>
+                  <View style={styles.cardIcon}>
+                    <Ionicons name="bulb" size={24} color="#FF6B35" />
+                  </View>
+                  <Text style={styles.cardTitle}>Great Ideas Come{"\n"}from Brilliant Minds</Text>
+                  <View style={styles.cardFooter}>
+                    <Image source={{ uri: "https://i.pravatar.cc/30?img=6" }} style={styles.cardAvatar} />
+                    <Text style={styles.cardAuthor}>Emma Thompson • 0 questions</Text>
+                  </View>
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </View>
 
-            <TouchableOpacity style={[styles.discoverCard, styles.ideasCard]}>
-              <View style={styles.cardIcon}>
-                <Ionicons name="bulb" size={24} color="#FF6B35" />
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Top Authors</Text>
+                <TouchableOpacity>
+                  <Text style={styles.viewAllText}>View all →</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.cardTitle}>Great Ideas Come{"\n"}from Brilliant Minds</Text>
-              <View style={styles.cardFooter}>
-                <Image source={{ uri: "https://i.pravatar.cc/30?img=6" }} style={styles.cardAvatar} />
-                <Text style={styles.cardAuthor}>Emma Thompson • 0 questions</Text>
+
+              <View style={styles.authorsContainer}>
+                {topAuthors.map((author) => (
+                  <TouchableOpacity key={author.id} style={styles.authorItem}>
+                    <Image source={{ uri: author.avatar }} style={styles.authorAvatar} />
+                    <Text style={styles.authorName}>{author.name}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-            </TouchableOpacity>
-          </View>
-        </View>
+            </View>
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Top Authors</Text>
-            <TouchableOpacity>
-              <Text style={styles.viewAllText}>View all →</Text>
-            </TouchableOpacity>
-          </View>
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Quizzes</Text>
+                <TouchableOpacity onPress={handleViewAllQuizzes}>
+                  <Text style={styles.viewAllText}>View all →</Text>
+                </TouchableOpacity>
+              </View>
 
-          <View style={styles.authorsContainer}>
-            {topAuthors.map((author) => (
-              <TouchableOpacity key={author.id} style={styles.authorItem}>
-                <Image source={{ uri: author.avatar }} style={styles.authorAvatar} />
-                <Text style={styles.authorName}>{author.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Quizzes</Text>
-            <TouchableOpacity onPress={handleViewAllQuizzes}>
-              <Text style={styles.viewAllText}>View all →</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.quizCards}>
-            {quizzes.map((quiz) => (
-              <TouchableOpacity key={quiz.id} style={[styles.discoverCard, styles.quizCard]}>
-                <View style={styles.cardIcon}>
-                  <Ionicons name="book" size={24} color="#fff" />
-                </View>
-                <Text style={styles.cardTitle}>{quiz.title}</Text>
-                <View style={styles.cardFooter}>
-                  <Image source={{ uri: `https://i.pravatar.cc/30?img=${quiz.id + 10}` }} style={styles.cardAvatar} />
-                  <Text style={styles.cardAuthor}>{quiz.author_name} • {quiz.num_questions} questions</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+              <View style={styles.quizCards}>
+                {quizzes.length > 0 ? (
+                  quizzes.map((quiz) => (
+                    <TouchableOpacity key={quiz.id} style={[styles.discoverCard, styles.quizCard]}>
+                      <View style={styles.cardIcon}>
+                        <Ionicons name="book" size={24} color="#fff" />
+                      </View>
+                      <Text style={styles.cardTitle}>{quiz.title}</Text>
+                      <View style={styles.cardFooter}>
+                        <Image source={{ uri: `https://i.pravatar.cc/30?img=${quiz.id + 10}` }} style={styles.cardAvatar} />
+                        <Text style={styles.cardAuthor}>{quiz.author_name} • {quiz.num_questions} questions</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <Text style={styles.noQuizzesText}>No quizzes available</Text>
+                )}
+              </View>
+            </View>
+          </>
+        )}
       </ScrollView>
 
       <View style={styles.bottomNav}>
@@ -224,6 +285,15 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#333",
   },
   playQuizSection: {
     backgroundColor: "#6B46C1",
@@ -380,6 +450,11 @@ const styles = StyleSheet.create({
   navItem: {
     flex: 1,
     alignItems: "center",
+  },
+  noQuizzesText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
   },
 })
 

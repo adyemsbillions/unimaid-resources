@@ -1,20 +1,16 @@
 "use client"
-import { View, Text, StyleSheet, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, TextInput } from "react-native"
+import { View, Text, StyleSheet, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, TextInput, Alert } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
+const BASE_URL = "http://192.168.218.38/unimaidresourcesquiz/"
+
 const Search = () => {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
-  // Placeholder data for search results
-  const quizzes = [
-    { id: 1, title: "Productivity Quiz", author: "Alex Johnson", icon: "bar-chart" },
-    { id: 2, title: "General Knowledge Trivia", author: "Sarah Lee", icon: "bulb" },
-    { id: 3, title: "Science Challenge", author: "Mark Brown", icon: "flask" },
-    { id: 4, title: "History Trivia", author: "Emma Thompson", icon: "book" },
-  ]
+  const [courses, setCourses] = useState([])
 
   useEffect(() => {
     const checkLoginStatus = async () => {
@@ -29,6 +25,29 @@ const Search = () => {
       }
     }
     checkLoginStatus()
+
+    const fetchCourses = async () => {
+      try {
+        const response = await fetch(`${BASE_URL}api/get_courses.php`)
+        const responseText = await response.text()
+        console.log("Courses API Response:", responseText)
+        try {
+          const data = JSON.parse(responseText)
+          if (data.success) {
+            setCourses(data.courses)
+          } else {
+            Alert.alert("Error", data.error || "Failed to fetch courses")
+          }
+        } catch (e) {
+          console.error("Courses JSON Parse Error:", e)
+          Alert.alert("Error", "Invalid courses response from server")
+        }
+      } catch (error) {
+        console.error("Error fetching courses:", error)
+        Alert.alert("Error", "Failed to fetch courses")
+      }
+    }
+    fetchCourses()
   }, [router])
 
   const handleBack = () => {
@@ -43,14 +62,20 @@ const Search = () => {
       router.replace("/")
     } catch (error) {
       console.error("Logout error:", error)
+      Alert.alert("Error", "Failed to log out")
     }
   }
 
-  // Filter quizzes based on search query
-  const filteredQuizzes = quizzes.filter(
-    (quiz) =>
-      quiz.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      quiz.author.toLowerCase().includes(searchQuery.toLowerCase())
+  const handleQuizSelect = (id) => {
+    router.push(`/takequiz/${id}`)
+    console.log(`Quiz ${id} pressed, navigating to /takequiz/${id}`)
+  }
+
+  // Filter courses based on search query
+  const filteredCourses = courses.filter(
+    (course) =>
+      course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      course.author.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   return (
@@ -84,15 +109,19 @@ const Search = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Search Results</Text>
           <View style={styles.quizContainer}>
-            {filteredQuizzes.length > 0 ? (
-              filteredQuizzes.map((quiz) => (
-                <TouchableOpacity key={quiz.id} style={styles.quizCard}>
+            {filteredCourses.length > 0 ? (
+              filteredCourses.map((course) => (
+                <TouchableOpacity
+                  key={course.id}
+                  style={styles.quizCard}
+                  onPress={() => handleQuizSelect(course.id)}
+                >
                   <View style={styles.cardIcon}>
-                    <Ionicons name={quiz.icon} size={24} color="#fff" />
+                    <Ionicons name={course.icon} size={24} color="#fff" />
                   </View>
                   <View style={styles.cardContent}>
-                    <Text style={styles.cardTitle}>{quiz.title}</Text>
-                    <Text style={styles.cardAuthor}>by {quiz.author}</Text>
+                    <Text style={styles.cardTitle}>{course.title}</Text>
+                    <Text style={styles.cardAuthor}>by {course.author}</Text>
                   </View>
                 </TouchableOpacity>
               ))

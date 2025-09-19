@@ -1,14 +1,20 @@
+
 "use client"
-import { View, Text, StyleSheet, SafeAreaView, StatusBar, Image, TouchableOpacity, ScrollView } from "react-native"
+import { View, Text, StyleSheet, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Alert } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
+const BASE_URL = "http://192.168.218.38/unimaidresourcesquiz/"
+
 const Profile = () => {
   const router = useRouter()
-  const [userName, setUserName] = useState("John Doe")
-  const [userAvatar, setUserAvatar] = useState("https://i.pravatar.cc/100?img=7")
+  const [userName, setUserName] = useState("Loading...")
+  const [isLoading, setIsLoading] = useState(true)
+  const [stats, setStats] = useState({ quizzes_taken: 0, avg_score: 0, streak_days: 0 })
+  const [achievements, setAchievements] = useState([])
+  const [recentActivity, setRecentActivity] = useState([])
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -19,11 +25,62 @@ const Profile = () => {
           router.replace("/login")
           return
         }
-        // Placeholder: In a real app, fetch user data from an API using userId
-        setUserName("John Doe")
-        setUserAvatar("https://i.pravatar.cc/100?img=7")
+
+        console.log("Fetching user data for userId:", userId)
+
+        const userResponse = await fetch(`${BASE_URL}api/get_user_data.php`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: parseInt(userId) }),
+        })
+        const userText = await userResponse.text()
+        console.log("User API Response:", userText)
+        let userData
+        try {
+          userData = JSON.parse(userText)
+        } catch (jsonError) {
+          console.error("JSON Parse error (user):", jsonError)
+          throw new Error("Invalid JSON response from server")
+        }
+
+        if (userResponse.ok && userData.success) {
+          setUserName(userData.username || "Unknown User")
+        } else {
+          Alert.alert("Error", userData.error || "Failed to fetch user data")
+          setUserName("Unknown User")
+          router.replace("/login")
+          return
+        }
+
+        const statsResponse = await fetch(`${BASE_URL}api/get_user_stats.php`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: parseInt(userId) }),
+        })
+        const statsText = await statsResponse.text()
+        console.log("Stats API Response:", statsText)
+        let statsData
+        try {
+          statsData = JSON.parse(statsText)
+        } catch (jsonError) {
+          console.error("JSON Parse error (stats):", jsonError)
+          throw new Error("Invalid JSON response from server")
+        }
+
+        if (statsResponse.ok && statsData.success) {
+          setStats(statsData.stats)
+          setAchievements(statsData.achievements)
+          setRecentActivity(statsData.recentActivity)
+        } else {
+          Alert.alert("Error", statsData.error || "Failed to fetch stats")
+        }
       } catch (error) {
-        console.error("Error fetching user data:", error)
+        console.error("Error fetching data:", error)
+        Alert.alert("Error", `Network error occurred: ${error.message}`)
+        setUserName("Unknown User")
+        router.replace("/login")
+      } finally {
+        setIsLoading(false)
       }
     }
     fetchUserData()
@@ -41,14 +98,13 @@ const Profile = () => {
       router.replace("/")
     } catch (error) {
       console.error("Logout error:", error)
+      Alert.alert("Error", "Failed to log out")
     }
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.iconButton} onPress={handleBack}>
           <Ionicons name="arrow-back-outline" size={24} color="#666" />
@@ -58,40 +114,40 @@ const Profile = () => {
           <Ionicons name="log-out-outline" size={24} color="#666" />
         </TouchableOpacity>
       </View>
-
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Profile Info */}
         <View style={styles.profileContainer}>
           <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>JD</Text>
+            {isLoading ? (
+              <Text style={styles.avatarText}>...</Text>
+            ) : (
+              <Text style={styles.avatarText}>
+                {userName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+              </Text>
+            )}
           </View>
-          <Text style={styles.userName}>{userName}</Text>
+          <Text style={styles.userName}>{isLoading ? "Loading..." : userName}</Text>
           <Text style={styles.userSubtitle}>Quiz Enthusiast</Text>
           <TouchableOpacity style={styles.editButton}>
             <Text style={styles.editButtonText}>Edit Profile</Text>
           </TouchableOpacity>
         </View>
-
-        {/* Stats */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Your Stats</Text>
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>127</Text>
+              <Text style={styles.statValue}>{stats.quizzes_taken}</Text>
               <Text style={styles.statLabel}>Quizzes Taken</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>89%</Text>
+              <Text style={styles.statValue}>{stats.avg_score}%</Text>
               <Text style={styles.statLabel}>Avg Score</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>15</Text>
+              <Text style={styles.statValue}>{stats.streak_days}</Text>
               <Text style={styles.statLabel}>Streak Days</Text>
             </View>
           </View>
         </View>
-
-        {/* Achievements */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Achievements</Text>
@@ -100,46 +156,41 @@ const Profile = () => {
             </TouchableOpacity>
           </View>
           <View style={styles.achievementsContainer}>
-            {[
-              { icon: "trophy", label: "First Win", bgColor: "#FEF3C7" },
-              { icon: "flame", label: "Hot Streak", bgColor: "#E9D5FF" },
-              { icon: "bulb", label: "Brain Power", bgColor: "#BFDBFE" },
-              { icon: "star", label: "All Star", bgColor: "#D1FAE5" },
-            ].map((achievement, index) => (
-              <View key={index} style={styles.achievementItem}>
-                <View style={[styles.achievementIcon, { backgroundColor: achievement.bgColor }]}>
-                  <Ionicons name={achievement.icon} size={24} color="#333" />
+            {achievements.length > 0 ? (
+              achievements.map((achievement, index) => (
+                <View key={index} style={styles.achievementItem}>
+                  <View style={[styles.achievementIcon, { backgroundColor: achievement.bgColor }]}>
+                    <Ionicons name={achievement.icon} size={24} color="#333" />
+                  </View>
+                  <Text style={styles.achievementLabel}>{achievement.label}</Text>
                 </View>
-                <Text style={styles.achievementLabel}>{achievement.label}</Text>
-              </View>
-            ))}
+              ))
+            ) : (
+              <Text style={styles.noDataText}>No achievements yet</Text>
+            )}
           </View>
         </View>
-
-        {/* Recent Activity */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Recent Activity</Text>
           <View style={styles.activityContainer}>
-            {[
-              { icon: "flask", name: "Science Quiz", score: "95%", time: "2h ago", bgColor: "#E9D5FF" },
-              { icon: "earth", name: "Geography Quiz", score: "87%", time: "1d ago", bgColor: "#BFDBFE" },
-              { icon: "book", name: "Literature Quiz", score: "92%", time: "3d ago", bgColor: "#D1FAE5" },
-            ].map((activity, index) => (
-              <View key={index} style={styles.activityItem}>
-                <View style={[styles.activityIcon, { backgroundColor: activity.bgColor }]}>
-                  <Ionicons name={activity.icon} size={20} color="#333" />
+            {recentActivity.length > 0 ? (
+              recentActivity.map((activity, index) => (
+                <View key={index} style={styles.activityItem}>
+                  <View style={[styles.activityIcon, { backgroundColor: activity.bgColor }]}>
+                    <Ionicons name={activity.icon} size={20} color="#333" />
+                  </View>
+                  <View style={styles.activityDetails}>
+                    <Text style={styles.activityName}>{activity.name}</Text>
+                    <Text style={styles.activityScore}>Scored {activity.score}</Text>
+                  </View>
+                  <Text style={styles.activityTime}>{activity.time}</Text>
                 </View>
-                <View style={styles.activityDetails}>
-                  <Text style={styles.activityName}>{activity.name}</Text>
-                  <Text style={styles.activityScore}>Scored {activity.score}</Text>
-                </View>
-                <Text style={styles.activityTime}>{activity.time}</Text>
-              </View>
-            ))}
+              ))
+            ) : (
+              <Text style={styles.noDataText}>No recent activity</Text>
+            )}
           </View>
         </View>
-
-        {/* Settings */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Settings</Text>
           <View style={styles.settingsContainer}>
@@ -285,6 +336,7 @@ const styles = StyleSheet.create({
   },
   achievementsContainer: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
     backgroundColor: "#fff",
     borderRadius: 10,
@@ -293,8 +345,9 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   achievementItem: {
-    flex: 1,
+    width: "48%",
     alignItems: "center",
+    marginBottom: 10,
   },
   achievementIcon: {
     width: 48,
@@ -374,6 +427,12 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     backgroundColor: "#fff",
+  },
+  noDataText: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    padding: 10,
   },
 })
 

@@ -13,7 +13,7 @@ const AllQuizzes = () => {
   useEffect(() => {
     const fetchQuizzes = async () => {
       try {
-        const response = await fetch("http://192.168.156.38/unimaidresourcesquiz/api/get_quizzes.php")
+        const response = await fetch("http://192.168.218.38/unimaidresourcesquiz/api/get_quizzes.php")
         const data = await response.json()
         setQuizzes(data)
         setFilteredQuizzes(data)
