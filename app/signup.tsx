@@ -13,6 +13,8 @@ import {
   Alert,
   Animated,
   ActivityIndicator,
+  FlatList,
+  Modal,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -22,20 +24,51 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const { width, height } = Dimensions.get("window");
 const BASE_URL = "https://uresources.cravii.ng/";
 
+// Subjects from subjects.json
+const JAMB_SUBJECTS = [
+  "English Language",
+  "Mathematics",
+  "Physics",
+  "Chemistry",
+  "Biology",
+  "Economics",
+  "Commerce",
+  "Accounting",
+  "Government",
+  "Geography",
+  "Literature in English",
+  "Christian Religious Studies (CRS)",
+  "Islamic Religious Studies (IRS)",
+  "Agricultural Science",
+  "History",
+  "Civic Education",
+  "Fine Arts",
+  "Home Economics",
+  "Technical Drawing",
+  "Further Mathematics",
+  "French",
+  "Music",
+  "Computer Studies",
+];
+
 export default function SignupScreen() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [department, setDepartment] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [selectedSubjects, setSelectedSubjects] = useState([]);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showSubjectModal, setShowSubjectModal] = useState(false);
   const [images, setImages] = useState([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
-  // Fetch images (same as OnboardingScreen)
+  // Fetch images
   useEffect(() => {
     const fetchImages = async () => {
       try {
@@ -44,7 +77,6 @@ export default function SignupScreen() {
         const data = await response.json();
         if (response.ok && Array.isArray(data)) {
           const formattedImages = data.map((item) => {
-            // Clean up legacy URLs
             let cleanUrl = item.image_url
               .replace("http://192.168.218.38/unimaidresourcesquiz/api/uploads/", "")
               .replace("uploads/", "")
@@ -55,7 +87,6 @@ export default function SignupScreen() {
             };
           });
           setImages(formattedImages);
-          // Preload images
           formattedImages.forEach((image) => Image.prefetch(image.image_url));
         } else {
           console.error("Error fetching images:", data.error || "Invalid response");
@@ -97,7 +128,31 @@ export default function SignupScreen() {
     return () => clearInterval(interval);
   }, [images, currentImageIndex, fadeAnim]);
 
+  // Handle subject selection
+  const toggleSubject = (subject) => {
+    if (subject === "English Language" && !selectedSubjects.includes("English Language")) {
+      setSelectedSubjects([subject, ...selectedSubjects.filter((s) => s !== "English Language")]);
+    } else if (selectedSubjects.includes(subject)) {
+      if (subject !== "English Language") {
+        setSelectedSubjects(selectedSubjects.filter((s) => s !== subject));
+      }
+    } else if (selectedSubjects.length < 4) {
+      setSelectedSubjects([...selectedSubjects, subject]);
+    } else {
+      Alert.alert("Limit Reached", "You can only select up to 4 subjects.");
+    }
+  };
+
   const handleSignup = async () => {
+    console.log("Signup pressed, navigating to /signup");
+    if (selectedSubjects.length !== 4) {
+      Alert.alert("Error", "Please select exactly 4 subjects, including English Language.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert("Error", "Passwords do not match.");
+      return;
+    }
     try {
       const response = await fetch(`${BASE_URL}api/signup.php`, {
         method: "POST",
@@ -108,12 +163,26 @@ export default function SignupScreen() {
           username,
           email,
           password,
+          confirmPassword,
           department,
           phoneNumber,
+          subjects: selectedSubjects,
         }),
       });
 
-      const data = await response.json();
+      // Log raw response for debugging
+      const rawResponse = await response.text();
+      console.log("Raw response:", rawResponse);
+
+      // Attempt to parse JSON
+      let data;
+      try {
+        data = JSON.parse(rawResponse);
+      } catch (e) {
+        console.error("JSON parse error:", e.message, rawResponse);
+        Alert.alert("Error", "Invalid server response: " + e.message);
+        return;
+      }
 
       if (response.ok) {
         Alert.alert("Success", data.message, [
@@ -123,8 +192,8 @@ export default function SignupScreen() {
         Alert.alert("Error", data.error || "Something went wrong");
       }
     } catch (error) {
-      Alert.alert("Error", "Network error occurred");
       console.error("Signup error:", error);
+      Alert.alert("Error", "Network error occurred: " + error.message);
     }
   };
 
@@ -136,6 +205,30 @@ export default function SignupScreen() {
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
   };
+
+  const toggleConfirmPasswordVisibility = () => {
+    setShowConfirmPassword(!showConfirmPassword);
+  };
+
+  // Render subject item
+  const renderSubjectItem = ({ item }) => (
+    <TouchableOpacity
+      style={[
+        styles.subjectItem,
+        selectedSubjects.includes(item) && styles.subjectItemSelected,
+      ]}
+      onPress={() => toggleSubject(item)}
+    >
+      <Text
+        style={[
+          styles.subjectText,
+          selectedSubjects.includes(item) && styles.subjectTextSelected,
+        ]}
+      >
+        {item}
+      </Text>
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -217,6 +310,19 @@ export default function SignupScreen() {
                   <Text style={styles.eyeIcon}>{showPassword ? "👁️" : "👁️‍🗨️"}</Text>
                 </TouchableOpacity>
               </View>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={[styles.input, styles.passwordInput]}
+                  placeholder="Confirm Password"
+                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirmPassword}
+                />
+                <TouchableOpacity style={styles.eyeButton} onPress={toggleConfirmPasswordVisibility}>
+                  <Text style={styles.eyeIcon}>{showConfirmPassword ? "👁️" : "👁️‍🗨️"}</Text>
+                </TouchableOpacity>
+              </View>
               <TextInput
                 style={styles.input}
                 placeholder="Department"
@@ -226,12 +332,56 @@ export default function SignupScreen() {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Phone Number"
+                placeholder="Phone Number (Optional)"
                 placeholderTextColor="rgba(255, 255, 255, 0.5)"
                 value={phoneNumber}
                 onChangeText={setPhoneNumber}
                 keyboardType="phone-pad"
               />
+              <TouchableOpacity
+                style={styles.input}
+                onPress={() => setShowSubjectModal(true)}
+              >
+                <Text
+                  style={[
+                    styles.input,
+                    { color: selectedSubjects.length > 0 ? "#FFFFFF" : "rgba(255, 255, 255, 0.5)" },
+                  ]}
+                >
+                  {selectedSubjects.length > 0
+                    ? selectedSubjects.join(", ")
+                    : "Select 4 JAMB Subjects"}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Subject Selection Modal */}
+              <Modal
+                visible={showSubjectModal}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setShowSubjectModal(false)}
+              >
+                <View style={styles.modalContainer}>
+                  <View style={styles.modalContent}>
+                    <Text style={styles.modalTitle}>Select 4 JAMB Subjects</Text>
+                    <Text style={styles.modalSubtitle}>
+                      English Language is mandatory. Select 3 additional subjects.
+                    </Text>
+                    <FlatList
+                      data={JAMB_SUBJECTS}
+                      renderItem={renderSubjectItem}
+                      keyExtractor={(item) => item}
+                      style={styles.subjectList}
+                    />
+                    <TouchableOpacity
+                      style={styles.modalButton}
+                      onPress={() => setShowSubjectModal(false)}
+                    >
+                      <Text style={styles.modalButtonText}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </Modal>
 
               <TouchableOpacity style={styles.primaryButton} onPress={handleSignup} activeOpacity={0.9}>
                 <LinearGradient colors={["#8B5CF6", "#7C3AED"]} style={styles.gradientButton}>
@@ -416,5 +566,65 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     letterSpacing: 0.3,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#1F2937",
+    borderRadius: 16,
+    padding: 20,
+    width: width * 0.9,
+    maxHeight: height * 0.7,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.7)",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  subjectList: {
+    marginBottom: 20,
+  },
+  subjectItem: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 10,
+    padding: 15,
+    marginVertical: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  subjectItemSelected: {
+    backgroundColor: "rgba(139, 92, 246, 0.4)",
+    borderColor: "#8B5CF6",
+  },
+  subjectText: {
+    color: "rgba(255, 255, 255, 0.8)",
+    fontSize: 16,
+  },
+  subjectTextSelected: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  modalButton: {
+    backgroundColor: "#8B5CF6",
+    borderRadius: 12,
+    paddingVertical: 15,
+    alignItems: "center",
+  },
+  modalButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
