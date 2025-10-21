@@ -6,7 +6,7 @@ import { useRouter, useLocalSearchParams } from "expo-router"
 import { useState, useEffect } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
-const BASE_URL = "http://192.168.218.38/unimaidresourcesquiz/"
+const BASE_URL = "https://uresources.cravii.ng/"
 
 const TakeQuiz = () => {
   const router = useRouter()
@@ -312,10 +312,10 @@ const TakeQuiz = () => {
               </Text>
               <Text style={styles.gradeText}>Grade: {getGrade(score, selectedQuestions.length)}</Text>
               <View style={styles.badgeContainer}>
-                <Ionicons 
-                  name={getBadge(score, selectedQuestions.length).icon} 
-                  size={48} 
-                  color={getBadge(score, selectedQuestions.length).color} 
+                <Ionicons
+                  name={getBadge(score, selectedQuestions.length).icon}
+                  size={48}
+                  color={getBadge(score, selectedQuestions.length).color}
                 />
                 <Text style={styles.badgeText}>
                   {getBadge(score, selectedQuestions.length).text}
@@ -348,7 +348,7 @@ const TakeQuiz = () => {
           })}
           <View style={styles.resultsButtonContainer}>
             <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-              <Text style={styles.backButtonText}>Back to Selection</Text>
+              <Text style={styles.backButtonText}>Back</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.retryButton}

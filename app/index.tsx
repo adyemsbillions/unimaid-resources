@@ -6,7 +6,7 @@ import { useEffect, useState, useRef } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
 const { width, height } = Dimensions.get("window")
-const BASE_URL = "http://192.168.218.38/unimaidresourcesquiz/"
+const BASE_URL = "https://uresources.cravii.ng/"
 
 export default function OnboardingScreen() {
   const router = useRouter()
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(139, 92, 246, 0.3)",
   },
   logoText: {
-    color: "#8B5CF6",
+    color: "#CECBD5FF",
     fontSize: 18,
     fontWeight: "700",
     letterSpacing: 0.5,

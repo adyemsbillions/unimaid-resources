@@ -1,22 +1,104 @@
-"use client"
-import { View, Text, TouchableOpacity, StyleSheet, StatusBar, SafeAreaView, Image, Dimensions, TextInput, ScrollView, Modal, Alert } from "react-native"
-import { useRouter } from "expo-router"
-import { LinearGradient } from "expo-linear-gradient"
-import { useState } from "react"
-import AsyncStorage from "@react-native-async-storage/async-storage"
+"use client";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  StatusBar,
+  SafeAreaView,
+  Image,
+  Dimensions,
+  TextInput,
+  ScrollView,
+  Modal,
+  Alert,
+  Animated,
+  ActivityIndicator,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
+import { useState, useEffect, useRef } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const { width, height } = Dimensions.get("window")
+const { width, height } = Dimensions.get("window");
+const BASE_URL = "https://uresources.cravii.ng/";
 
 export default function LoginScreen() {
-  const router = useRouter()
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [modalVisible, setModalVisible] = useState(false)
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [images, setImages] = useState([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+
+  // Fetch images (same as OnboardingScreen)
+  useEffect(() => {
+    const fetchImages = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch(`${BASE_URL}api/get_slide_images.php`);
+        const data = await response.json();
+        if (response.ok && Array.isArray(data)) {
+          const formattedImages = data.map((item) => {
+            // Clean up legacy URLs
+            let cleanUrl = item.image_url
+              .replace("http://192.168.218.38/unimaidresourcesquiz/api/uploads/", "")
+              .replace("uploads/", "")
+              .replace(/^\//, "");
+            return {
+              id: item.id,
+              image_url: `${BASE_URL}api/uploads/${cleanUrl}`,
+            };
+          });
+          setImages(formattedImages);
+          // Preload images
+          formattedImages.forEach((image) => Image.prefetch(image.image_url));
+        } else {
+          console.error("Error fetching images:", data.error || "Invalid response");
+          Alert.alert("Error", data.error || "Failed to fetch images");
+          setImages([]);
+        }
+      } catch (error) {
+        console.error("Network error fetching images:", error);
+        Alert.alert("Error", "Network error occurred while fetching images");
+        setImages([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchImages();
+  }, []);
+
+  // Slideshow animation
+  useEffect(() => {
+    if (images.length === 0) return;
+    const interval = setInterval(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 1000,
+        useNativeDriver: true,
+      }).start(() => {
+        let newIndex;
+        do {
+          newIndex = Math.floor(Math.random() * images.length);
+        } while (newIndex === currentImageIndex && images.length > 1);
+        setCurrentImageIndex(newIndex);
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }).start();
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [images, currentImageIndex, fadeAnim]);
 
   const handleLogin = async () => {
     try {
-      const response = await fetch("http://192.168.218.38/unimaidresourcesquiz/api/login.php", {
+      const response = await fetch(`${BASE_URL}api/login.php`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -25,50 +107,63 @@ export default function LoginScreen() {
           email,
           password,
         }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (response.ok) {
-        // Store userId in AsyncStorage
-        await AsyncStorage.setItem("userId", data.userId.toString())
-        setModalVisible(true)
+        await AsyncStorage.setItem("userId", data.userId.toString());
+        setModalVisible(true);
       } else {
-        Alert.alert("Error", data.error || "Something went wrong")
+        Alert.alert("Error", data.error || "Something went wrong");
       }
     } catch (error) {
-      Alert.alert("Error", "Network error occurred")
-      console.error("Login error:", error)
+      Alert.alert("Error", "Network error occurred");
+      console.error("Login error:", error);
     }
-  }
+  };
 
   const handleSignup = () => {
-    router.push("/signup")
-    console.log("Navigating to /signup")
-  }
+    router.push("/signup");
+    console.log("Navigating to /signup");
+  };
 
   const togglePasswordVisibility = () => {
-    setShowPassword(!showPassword)
-  }
+    setShowPassword(!showPassword);
+  };
 
   const handleModalClose = () => {
-    setModalVisible(false)
-    router.push("/dashboard")
-  }
+    setModalVisible(false);
+    router.push("/dashboard");
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      {/* Background Image with Gradient Overlay */}
+      {/* Background Image with Fade Effect */}
       <View style={styles.backgroundContainer}>
-        <Image
-          source={{
-            uri: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1350&q=80",
-          }}
-          style={styles.backgroundImage}
-          resizeMode="cover"
-        />
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#8B5CF6" />
+            <Text style={styles.loadingText}>Loading images...</Text>
+          </View>
+        ) : images.length > 0 ? (
+          <Animated.Image
+            source={{ uri: images[currentImageIndex].image_url }}
+            style={[styles.backgroundImage, { opacity: fadeAnim }]}
+            resizeMode="cover"
+            onError={() => Alert.alert("Error", "Failed to load image")}
+          />
+        ) : (
+          <Image
+            source={{
+              uri: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1350&q=80",
+            }}
+            style={styles.backgroundImage}
+            resizeMode="cover"
+          />
+        )}
         <LinearGradient
           colors={["rgba(0,0,0,0.3)", "rgba(0,0,0,0.7)", "rgba(0,0,0,0.9)"]}
           style={styles.gradientOverlay}
@@ -153,7 +248,7 @@ export default function LoginScreen() {
         </View>
       </Modal>
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -174,6 +269,17 @@ const styles = StyleSheet.create({
   },
   gradientOverlay: {
     ...StyleSheet.absoluteFillObject,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#000",
+  },
+  loadingText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    marginTop: 10,
   },
   scrollContent: {
     flexGrow: 1,
@@ -356,4 +462,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#8B5CF6",
   },
-})
+});

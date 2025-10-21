@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import type React from "react"
 
 import { Button } from "@/components/ui/button"
@@ -8,12 +8,71 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Eye, EyeOff, ArrowLeft } from "lucide-react"
 import Link from "next/link"
+import { Animated } from "react"
+
+const BASE_URL = "https://uresources.cravii.ng/"
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [images, setImages] = useState([])
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [imgIsLoading, setImgIsLoading] = useState(true)
+  const fadeAnim = useRef(new Animated.Value(1)).current
+
+  useEffect(() => {
+    const fetchImages = async () => {
+      try {
+        setImgIsLoading(true)
+        const response = await fetch(`${BASE_URL}api/get_slide_images.php`)
+        const data = await response.json()
+        if (response.ok && Array.isArray(data)) {
+          const formattedImages = data.map(item => ({
+            id: item.id,
+            image_url: `${BASE_URL}api/uploads/${item.image_url.startsWith('uploads/') ? item.image_url.replace('uploads/', '') : item.image_url}`
+          }))
+          setImages(formattedImages)
+        } else {
+          console.error("Error fetching images:", data.error || "Invalid response")
+          setImages([])
+        }
+      } catch (error) {
+        console.error("Network error fetching images:", error)
+        setImages([])
+      } finally {
+        setImgIsLoading(false)
+      }
+    }
+    fetchImages()
+  }, [])
+
+  useEffect(() => {
+    if (images.length === 0) return
+
+    const interval = setInterval(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 1000,
+        useNativeDriver: true,
+      }).start(() => {
+        let newIndex
+        do {
+          newIndex = Math.floor(Math.random() * images.length)
+        } while (newIndex === currentImageIndex && images.length > 1)
+        
+        setCurrentImageIndex(newIndex)
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }).start()
+      })
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [images, fadeAnim, currentImageIndex])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -27,8 +86,39 @@ export default function LoginScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary via-primary/90 to-accent flex items-center justify-center p-4">
-      <div className="w-full max-w-md relative">
+    <div className="min-h-screen bg-gradient-to-br from-primary via-primary/90 to-accent flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Background Image with Fade Effect */}
+      <div className="absolute inset-0">
+        {imgIsLoading ? (
+          <div className="w-full h-full bg-black flex items-center justify-center">
+            <div className="text-white">Loading background...</div>
+          </div>
+        ) : images.length > 0 ? (
+          <Animated.div
+            style={{
+              opacity: fadeAnim,
+              width: '100%',
+              height: '100%',
+              backgroundImage: `url(${images[currentImageIndex].image_url})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              backgroundImage: `url("https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1350&q=80")`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary/90 to-accent" />
+      </div>
+
+      <div className="w-full max-w-md relative z-10">
         {/* Back Button */}
         <Link href="/" className="inline-flex items-center gap-2 text-white/80 hover:text-white mb-8 transition-colors">
           <ArrowLeft className="w-4 h-4" />

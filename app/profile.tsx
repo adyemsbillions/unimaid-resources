@@ -1,20 +1,52 @@
-
-"use client"
 import { View, Text, StyleSheet, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Alert } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
-const BASE_URL = "http://192.168.218.38/unimaidresourcesquiz/"
+interface Stats {
+  quizzes_taken: number;
+  avg_score: number;
+  streak_days: number;
+}
 
-const Profile = () => {
+interface Achievement {
+  icon: string;
+  label: string;
+  bgColor: string;
+}
+
+interface Activity {
+  icon: string;
+  name: string;
+  score: number;
+  time: string;
+  bgColor: string;
+}
+
+interface UserData {
+  success: boolean;
+  username?: string;
+  error?: string;
+}
+
+interface StatsData {
+  success: boolean;
+  stats: Stats;
+  achievements: Achievement[];
+  recentActivity: Activity[];
+  error?: string;
+}
+
+const BASE_URL = "https://uresources.cravii.ng/"
+
+const Profile: React.FC = () => {
   const router = useRouter()
-  const [userName, setUserName] = useState("Loading...")
-  const [isLoading, setIsLoading] = useState(true)
-  const [stats, setStats] = useState({ quizzes_taken: 0, avg_score: 0, streak_days: 0 })
-  const [achievements, setAchievements] = useState([])
-  const [recentActivity, setRecentActivity] = useState([])
+  const [userName, setUserName] = useState<string>("Loading...")
+  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [stats, setStats] = useState<Stats>({ quizzes_taken: 0, avg_score: 0, streak_days: 0 })
+  const [achievements, setAchievements] = useState<Achievement[]>([])
+  const [recentActivity, setRecentActivity] = useState<Activity[]>([])
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -35,7 +67,7 @@ const Profile = () => {
         })
         const userText = await userResponse.text()
         console.log("User API Response:", userText)
-        let userData
+        let userData: UserData
         try {
           userData = JSON.parse(userText)
         } catch (jsonError) {
@@ -59,7 +91,7 @@ const Profile = () => {
         })
         const statsText = await statsResponse.text()
         console.log("Stats API Response:", statsText)
-        let statsData
+        let statsData: StatsData
         try {
           statsData = JSON.parse(statsText)
         } catch (jsonError) {
@@ -69,8 +101,9 @@ const Profile = () => {
 
         if (statsResponse.ok && statsData.success) {
           setStats(statsData.stats)
-          setAchievements(statsData.achievements)
+          setAchievements(statsData.achievements || []) // Ensure achievements is always an array
           setRecentActivity(statsData.recentActivity)
+          console.log("Achievements loaded:", statsData.achievements)
         } else {
           Alert.alert("Error", statsData.error || "Failed to fetch stats")
         }
@@ -101,6 +134,8 @@ const Profile = () => {
       Alert.alert("Error", "Failed to log out")
     }
   }
+
+  console.log("Rendering Profile with userName:", userName, "isLoading:", isLoading)
 
   return (
     <SafeAreaView style={styles.container}>
@@ -156,13 +191,15 @@ const Profile = () => {
             </TouchableOpacity>
           </View>
           <View style={styles.achievementsContainer}>
-            {achievements.length > 0 ? (
+            {isLoading ? (
+              <Text style={styles.noDataText}>Loading achievements...</Text>
+            ) : achievements.length > 0 ? (
               achievements.map((achievement, index) => (
                 <View key={index} style={styles.achievementItem}>
-                  <View style={[styles.achievementIcon, { backgroundColor: achievement.bgColor }]}>
-                    <Ionicons name={achievement.icon} size={24} color="#333" />
+                  <View style={[styles.achievementIcon, { backgroundColor: achievement.bgColor || "#E5E7EB" }]}>
+                    <Ionicons name={achievement.icon || "help-circle"} size={24} color="#333" />
                   </View>
-                  <Text style={styles.achievementLabel}>{achievement.label}</Text>
+                  <Text style={styles.achievementLabel}>{achievement.label || "Unknown Achievement"}</Text>
                 </View>
               ))
             ) : (
@@ -173,17 +210,19 @@ const Profile = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Recent Activity</Text>
           <View style={styles.activityContainer}>
-            {recentActivity.length > 0 ? (
+            {isLoading ? (
+              <Text style={styles.noDataText}>Loading recent activity...</Text>
+            ) : recentActivity.length > 0 ? (
               recentActivity.map((activity, index) => (
                 <View key={index} style={styles.activityItem}>
-                  <View style={[styles.activityIcon, { backgroundColor: activity.bgColor }]}>
-                    <Ionicons name={activity.icon} size={20} color="#333" />
+                  <View style={[styles.activityIcon, { backgroundColor: activity.bgColor || "#E5E7EB" }]}>
+                    <Ionicons name={activity.icon || "school"} size={20} color="#333" />
                   </View>
                   <View style={styles.activityDetails}>
-                    <Text style={styles.activityName}>{activity.name}</Text>
-                    <Text style={styles.activityScore}>Scored {activity.score}</Text>
+                    <Text style={styles.activityName}>{activity.name || "Unknown Activity"}</Text>
+                    {/* <Text style={styles.activityScore}>Scored {activity.score || 0}</Text> */}
                   </View>
-                  <Text style={styles.activityTime}>{activity.time}</Text>
+                  <Text style={styles.activityTime}>{activity.time || "N/A"}</Text>
                 </View>
               ))
             ) : (
@@ -345,7 +384,7 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   achievementItem: {
-    width: "48%",
+    width: "100%", // Changed to full width for better visibility
     alignItems: "center",
     marginBottom: 10,
   },

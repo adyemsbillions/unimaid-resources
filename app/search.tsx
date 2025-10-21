@@ -5,7 +5,7 @@ import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
-const BASE_URL = "http://192.168.218.38/unimaidresourcesquiz/"
+const BASE_URL = "https://uresources.cravii.ng/"
 
 const Search = () => {
   const router = useRouter()
