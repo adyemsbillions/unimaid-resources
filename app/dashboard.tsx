@@ -162,13 +162,18 @@ const Dashboard = () => {
   }
 
   const handleViewAllVideos = () => {
-    router.push("/all_videos")
+    router.push("/qa-viewall")
     console.log("View all videos pressed, navigating to /qa-viewall")
   }
 
   const handleViewAllDonors = () => {
     router.push("/view-alldonors")
     console.log("View all donors pressed, navigating to /view-alldonors")
+  }
+
+  const handleQuizSelect = (id) => {
+    router.push(`/takequiz/${id}`)
+    console.log(`Quiz ${id} pressed, navigating to /takequiz/${id}`)
   }
 
   const openVideo = (video) => {
@@ -254,10 +259,10 @@ const Dashboard = () => {
                       </View>
                       <View style={styles.cardContent}>
                         <Text style={styles.cardTitle} numberOfLines={2}>
-                          {video.title || 'Untitled Video'}
+                          {video.title || "Untitled Video"}
                         </Text>
                         <Text style={styles.cardAuthor} numberOfLines={1}>
-                          {video.subject_name || 'Unknown Subject'}
+                          {video.subject_name || "Unknown Subject"}
                         </Text>
                         <Text style={styles.cardDate}>{new Date(video.created_at).toLocaleDateString()}</Text>
                       </View>
@@ -286,13 +291,17 @@ const Dashboard = () => {
               <View style={styles.quizCards}>
                 {quizzes.length > 0 ? (
                   quizzes.map((quiz) => (
-                    <TouchableOpacity key={quiz.id} style={styles.quizCard}>
+                    <TouchableOpacity
+                      key={quiz.id}
+                      style={styles.quizCard}
+                      onPress={() => handleQuizSelect(quiz.id)}
+                    >
                       <View style={styles.quizCardHeader}>
                         <View style={styles.quizIconContainer}>
                           <Ionicons name="book" size={20} color="#FFFFFF" />
                         </View>
                         <Text style={styles.quizCardTitle} numberOfLines={2}>
-                          {quiz.title || 'Untitled Quiz'}
+                          {quiz.title || "Untitled Quiz"}
                         </Text>
                       </View>
                       <View style={styles.quizCardDivider} />
@@ -313,7 +322,7 @@ const Dashboard = () => {
                 )}
               </View>
             </View>
-{/* 
+            {/* 
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionTitleContainer}>
@@ -338,7 +347,7 @@ const Dashboard = () => {
                           }
                         />
                       </View>
-                      <Text style={styles.donorName}>{donor.name || 'Anonymous'}</Text>
+                      <Text style={styles.donorName}>{donor.name || "Anonymous"}</Text>
                       <Text style={styles.donorWriteUp} numberOfLines={2}>
                         Donated ₦{(donor.amount || 0).toLocaleString()}
                       </Text>
@@ -352,7 +361,6 @@ const Dashboard = () => {
                 )}
               </View>
             </View> */}
-
             <View style={styles.bottomPadding} />
           </>
         )}
@@ -396,7 +404,7 @@ const Dashboard = () => {
             >
               <Ionicons name="close" size={28} color="#1F2937" />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>{selectedVideo?.title || 'Untitled Video'}</Text>
+            <Text style={styles.modalTitle}>{selectedVideo?.title || "Untitled Video"}</Text>
           </View>
           {videoLoading && (
             <View style={styles.videoLoadingContainer}>
@@ -412,7 +420,7 @@ const Dashboard = () => {
             posterSource={{
               uri:
                 selectedVideo?.thumbnail_path ||
-                "https://images.unsplash.com/photo-1611162617210-7d673bf0f Crawford?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80",
+                "https://images.unsplash.com/photo-1642726197512-617ce0e62262?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1yZWxhdGVkfDF8fHxlbnwwfHx8fHw%3D&auto=format&fit=crop&q=60&w=600",
             }}
             onError={(error) => {
               setVideoLoading(false)
@@ -455,9 +463,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 0,
+    paddingVertical: 30,
+    paddingTop: StatusBar.currentHeight + 10 || 34,
     backgroundColor: "#FFFFFF",
-    borderBottomWidth: 0,
+    borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
     elevation: 2,
     shadowColor: "#000",
@@ -473,11 +482,13 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   logo: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "800",
     color: "#1F2937",
     marginLeft: 10,
     letterSpacing: 0.3,
+    maxWidth: 180,
+    lineHeight: 20,
   },
   headerRight: {
     flexDirection: "row",

@@ -1,6 +1,15 @@
-
 "use client"
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, ScrollView, Alert, TextInput } from "react-native"
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  SafeAreaView,
+  StatusBar,
+  ScrollView,
+  Alert,
+  TextInput,
+} from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter, useLocalSearchParams } from "expo-router"
 import { useState, useEffect } from "react"
@@ -22,6 +31,7 @@ const TakeQuiz = () => {
   const [timerInterval, setTimerInterval] = useState(null)
   const [username, setUsername] = useState("Guest")
   const [questionCount, setQuestionCount] = useState("")
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -40,11 +50,28 @@ const TakeQuiz = () => {
         }
 
         const response = await fetch(`${BASE_URL}api/get_questions.php?course_id=${id}`)
-        const data = await response.json()
-        setQuestions(data)
+        const text = await response.text()
+        console.log("Questions API Response:", text, "Status:", response.status)
+        let data
+        try {
+          data = JSON.parse(text)
+        } catch (e) {
+          console.error("Questions JSON Parse Error:", e)
+          Alert.alert("Error", "Invalid response from server")
+          setIsLoading(false)
+          return
+        }
+        if (response.ok && Array.isArray(data)) {
+          setQuestions(data)
+        } else {
+          Alert.alert("Error", data.error || "Failed to fetch questions")
+          setQuestions([])
+        }
       } catch (error) {
         console.error("Error fetching data:", error)
-        Alert.alert("Error", "Failed to fetch data")
+        Alert.alert("Error", `Network error: ${error.message}`)
+      } finally {
+        setIsLoading(false)
       }
     }
     fetchData()
@@ -94,7 +121,7 @@ const TakeQuiz = () => {
   }
 
   const handleAnswerSelect = (questionId, option) => {
-    setSelectedAnswers(prev => ({ ...prev, [questionId]: option }))
+    setSelectedAnswers((prev) => ({ ...prev, [questionId]: option }))
   }
 
   const handleNext = () => {
@@ -111,7 +138,7 @@ const TakeQuiz = () => {
 
   const handleSubmit = async () => {
     let correctCount = 0
-    selectedQuestions.forEach(question => {
+    selectedQuestions.forEach((question) => {
       if (selectedAnswers[question.id] === question.correct_option) {
         correctCount++
       }
@@ -130,8 +157,8 @@ const TakeQuiz = () => {
             userId: parseInt(userId),
             courseId: parseInt(id),
             score: correctCount,
-            totalQuestions: selectedQuestions.length
-          })
+            totalQuestions: selectedQuestions.length,
+          }),
         })
         const result = await response.json()
         if (!result.success) {
@@ -162,11 +189,16 @@ const TakeQuiz = () => {
   const getOptionText = (question, option) => {
     if (!option) return "Not answered"
     switch (option) {
-      case "A": return question.option_a || "Option A"
-      case "B": return question.option_b || "Option B"
-      case "C": return question.option_c || "Option C"
-      case "D": return question.option_d || "Option D"
-      default: return "Invalid option"
+      case "A":
+        return question.option_a || "Option A"
+      case "B":
+        return question.option_b || "Option B"
+      case "C":
+        return question.option_c || "Option C"
+      case "D":
+        return question.option_d || "Option D"
+      default:
+        return "Invalid option"
     }
   }
 
@@ -188,6 +220,18 @@ const TakeQuiz = () => {
   }
 
   const currentQuestion = selectedQuestions[currentQuestionIndex]
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+        <View style={styles.emptyContainer}>
+          <Ionicons name="hourglass-outline" size={48} color="#6B46C1" />
+          <Text style={styles.emptyText}>Loading questions...</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
 
   if (questions.length === 0) {
     return (
@@ -224,7 +268,7 @@ const TakeQuiz = () => {
             placeholderTextColor="#999"
           />
           <TouchableOpacity
-            style={styles.selectionButton}
+            style={[styles.selectionButton, !questionCount && styles.disabledButton]}
             onPress={handleQuestionCountSelect}
             disabled={!questionCount}
           >
@@ -254,7 +298,7 @@ const TakeQuiz = () => {
           </View>
           <ScrollView style={styles.questionScroll}>
             <Text style={styles.questionText}>
-              {currentQuestionIndex + 1}. {currentQuestion?.question_text}
+              {currentQuestionIndex + 1}. {currentQuestion?.question_text || "No question text"}
             </Text>
             <View style={styles.optionsContainer}>
               {["option_a", "option_b", "option_c", "option_d"].map((opt, index) => {
@@ -263,16 +307,12 @@ const TakeQuiz = () => {
                 return (
                   <TouchableOpacity
                     key={opt}
-                    style={[
-                      styles.optionButton,
-                      isSelected ? styles.selectedOption : null
-                    ]}
+                    style={[styles.optionButton, isSelected ? styles.selectedOption : null]}
                     onPress={() => handleAnswerSelect(currentQuestion.id, optionLetter)}
                   >
-                    <Text style={[
-                      styles.optionText,
-                      isSelected ? styles.selectedOptionText : null
-                    ]}>
+                    <Text
+                      style={[styles.optionText, isSelected ? styles.selectedOptionText : null]}
+                    >
                       {optionLetter}. {currentQuestion?.[opt] || "N/A"}
                     </Text>
                   </TouchableOpacity>
@@ -317,9 +357,7 @@ const TakeQuiz = () => {
                   size={48}
                   color={getBadge(score, selectedQuestions.length).color}
                 />
-                <Text style={styles.badgeText}>
-                  {getBadge(score, selectedQuestions.length).text}
-                </Text>
+                <Text style={styles.badgeText}>{getBadge(score, selectedQuestions.length).text}</Text>
               </View>
             </View>
           </View>
@@ -327,12 +365,19 @@ const TakeQuiz = () => {
             const userAnswer = selectedAnswers[question.id]
             const isCorrect = userAnswer === question.correct_option
             return (
-              <View key={question.id} style={[styles.resultItem, !isCorrect && styles.incorrectItem]}>
-                <Text style={styles.resultQuestion}>{index + 1}. {question.question_text}</Text>
-                <Text style={[
-                  styles.resultAnswer,
-                  isCorrect ? styles.correctAnswer : styles.incorrectAnswer
-                ]}>
+              <View
+                key={question.id}
+                style={[styles.resultItem, !isCorrect && styles.incorrectItem]}
+              >
+                <Text style={styles.resultQuestion}>
+                  {index + 1}. {question.question_text || "No question text"}
+                </Text>
+                <Text
+                  style={[
+                    styles.resultAnswer,
+                    isCorrect ? styles.correctAnswer : styles.incorrectAnswer,
+                  ]}
+                >
                   Your Answer: {getOptionText(question, userAnswer)}
                 </Text>
                 <Text style={styles.resultCorrect}>
@@ -354,10 +399,10 @@ const TakeQuiz = () => {
               style={styles.retryButton}
               onPress={() => {
                 setShowResults(false)
+                setShowSelection(true)
                 setSelectedAnswers({})
                 setCurrentQuestionIndex(0)
                 setScore(0)
-                setShowSelection(true)
               }}
             >
               <Text style={styles.backButtonText}>Retry Quiz</Text>
@@ -440,6 +485,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 10,
     alignSelf: "center",
+  },
+  disabledButton: {
+    backgroundColor: "#ccc",
   },
   selectionButtonText: {
     color: "#fff",
