@@ -1,4 +1,3 @@
-
 "use client";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, SafeAreaView, StatusBar, Alert, Modal, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -208,18 +207,7 @@ const Dashboard = () => {
                   <Text style={styles.findFriendsText}>Hello, {username}!</Text>
                 </TouchableOpacity>
               </View>
-              <TouchableOpacity style={styles.playButton}>
-                <Image
-                  source={{
-                    uri: videos.length > 0 && videos[0].thumbnail_path
-                      ? videos[0].thumbnail_path
-                      : 'https://i.pravatar.cc/100'
-                  }}
-                  style={styles.logoImage}
-                  defaultSource={require('../assets/fallback-thumbnail.png')}
-                  onError={(error) => console.error("Thumbnail load failed:", error.nativeEvent.error)}
-                />
-              </TouchableOpacity>
+              {/* Removed the playButton with Image component */}
             </View>
 
             <View style={styles.section}>
@@ -234,17 +222,13 @@ const Dashboard = () => {
                 {videos.length > 0 ? (
                   videos.map((video) => (
                     <TouchableOpacity key={video.id} style={styles.discoverCard} onPress={() => openVideo(video)}>
-                      {video.thumbnail_path ? (
-                        <Image
-                          source={{ uri: video.thumbnail_path }}
-                          style={styles.cardThumbnail}
-                          onError={(error) => console.error(`Thumbnail load failed for ${video.thumbnail_path}:`, error.nativeEvent.error)}
-                        />
-                      ) : (
-                        <View style={styles.cardIcon}>
-                          <Ionicons name="videocam" size={24} color="#fff" />
-                        </View>
-                      )}
+                      <Image
+                        source={{ uri: video.thumbnail_path || 'https://images.unsplash.com/photo-1611162616475-46b635cb6868?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8dmlkZW98ZW58MHx8MHx8fDA%3D&auto=format&fit=crop&q=60&w=600' }}
+                        style={styles.cardThumbnail}
+                        onError={(error) =>
+                          console.error(`Thumbnail load failed for ${video.thumbnail_path}:`, error.nativeEvent.error)
+                        }
+                      />
                       <Text style={styles.cardTitle}>{video.title}</Text>
                       <Text style={styles.cardAuthor}>
                         {video.subject_name} - {video.topic_name}
@@ -370,7 +354,7 @@ const Dashboard = () => {
             style={[styles.videoView, videoLoading && { display: 'none' }]}
             useNativeControls
             resizeMode="contain"
-            posterSource={{ uri: selectedVideo?.thumbnail_path || 'https://i.pravatar.cc/100' }}
+            posterSource={{ uri: selectedVideo?.thumbnail_path || 'https://images.unsplash.com/photo-1611162617210-7d673bf0f Crawford?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80' }}
             onError={(error) => {
               setVideoLoading(false);
               Alert.alert("Error", `Failed to load video: ${error}`);
@@ -502,20 +486,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
-  playButton: {
-    backgroundColor: "#FFFFFF",
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 2,
-  },
-  logoImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
   section: {
     paddingHorizontal: 16,
     marginBottom: 24,
@@ -594,15 +564,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#4B40C3",
     fontWeight: "600",
-  },
-  cardIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 12,
   },
   cardTitle: {
     fontSize: 15,

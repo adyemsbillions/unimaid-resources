@@ -1,4 +1,5 @@
-"use client"
+
+"use client";
 import { Stack } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
@@ -50,6 +51,7 @@ function RootLayoutNav() {
         <Stack.Screen name="donate" options={{ headerShown: false }} />
         <Stack.Screen name="allquiz" options={{ headerShown: false }} />
         <Stack.Screen name="takequiz/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="PlayVideo" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
     </ThemeProvider>

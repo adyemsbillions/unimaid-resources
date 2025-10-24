@@ -27,6 +27,7 @@ interface Activity {
 interface UserData {
   success: boolean;
   username?: string;
+  subjects?: string[];
   error?: string;
 }
 
@@ -43,6 +44,7 @@ const BASE_URL = "https://uresources.cravii.ng/"
 const Profile: React.FC = () => {
   const router = useRouter()
   const [userName, setUserName] = useState<string>("Loading...")
+  const [subjects, setSubjects] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [stats, setStats] = useState<Stats>({ quizzes_taken: 0, avg_score: 0, streak_days: 0 })
   const [achievements, setAchievements] = useState<Achievement[]>([])
@@ -71,15 +73,17 @@ const Profile: React.FC = () => {
         try {
           userData = JSON.parse(userText)
         } catch (jsonError) {
-          console.error("JSON Parse error (user):", jsonError)
+          console.error("JSON Parse error (user):", jsonError, "Raw response:", userText)
           throw new Error("Invalid JSON response from server")
         }
 
         if (userResponse.ok && userData.success) {
           setUserName(userData.username || "Unknown User")
+          setSubjects(Array.isArray(userData.subjects) ? userData.subjects : [])
         } else {
           Alert.alert("Error", userData.error || "Failed to fetch user data")
           setUserName("Unknown User")
+          setSubjects([])
           router.replace("/login")
           return
         }
@@ -95,13 +99,13 @@ const Profile: React.FC = () => {
         try {
           statsData = JSON.parse(statsText)
         } catch (jsonError) {
-          console.error("JSON Parse error (stats):", jsonError)
+          console.error("JSON Parse error (stats):", jsonError, "Raw response:", statsText)
           throw new Error("Invalid JSON response from server")
         }
 
         if (statsResponse.ok && statsData.success) {
           setStats(statsData.stats)
-          setAchievements(statsData.achievements || []) // Ensure achievements is always an array
+          setAchievements(statsData.achievements || [])
           setRecentActivity(statsData.recentActivity)
           console.log("Achievements loaded:", statsData.achievements)
         } else {
@@ -111,6 +115,7 @@ const Profile: React.FC = () => {
         console.error("Error fetching data:", error)
         Alert.alert("Error", `Network error occurred: ${error.message}`)
         setUserName("Unknown User")
+        setSubjects([])
         router.replace("/login")
       } finally {
         setIsLoading(false)
@@ -135,7 +140,7 @@ const Profile: React.FC = () => {
     }
   }
 
-  console.log("Rendering Profile with userName:", userName, "isLoading:", isLoading)
+  console.log("Rendering Profile with userName:", userName, "subjects:", subjects, "isLoading:", isLoading)
 
   return (
     <SafeAreaView style={styles.container}>
@@ -184,6 +189,22 @@ const Profile: React.FC = () => {
           </View>
         </View>
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Your Subjects</Text>
+          <View style={styles.subjectsContainer}>
+            {isLoading ? (
+              <Text style={styles.noDataText}>Loading subjects...</Text>
+            ) : subjects.length > 0 ? (
+              subjects.map((subject, index) => (
+                <View key={index} style={styles.subjectItem}>
+                  <Text style={styles.subjectText}>{subject}</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.noDataText}>No subjects selected</Text>
+            )}
+          </View>
+        </View>
+        <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Achievements</Text>
             <TouchableOpacity>
@@ -220,7 +241,6 @@ const Profile: React.FC = () => {
                   </View>
                   <View style={styles.activityDetails}>
                     <Text style={styles.activityName}>{activity.name || "Unknown Activity"}</Text>
-                    {/* <Text style={styles.activityScore}>Scored {activity.score || 0}</Text> */}
                   </View>
                   <Text style={styles.activityTime}>{activity.time || "N/A"}</Text>
                 </View>
@@ -373,6 +393,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
   },
+  subjectsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    padding: 15,
+    justifyContent: "center",
+  },
+  subjectItem: {
+    backgroundColor: "#EDE9FE",
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    margin: 5,
+  },
+  subjectText: {
+    fontSize: 14,
+    color: "#6B46C1",
+    fontWeight: "500",
+  },
   achievementsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -384,7 +426,7 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   achievementItem: {
-    width: "100%", // Changed to full width for better visibility
+    width: "100%",
     alignItems: "center",
     marginBottom: 10,
   },
@@ -429,10 +471,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
     color: "#333",
-  },
-  activityScore: {
-    fontSize: 12,
-    color: "#666",
   },
   activityTime: {
     fontSize: 12,
