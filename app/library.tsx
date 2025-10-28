@@ -18,7 +18,7 @@ import { useRouter } from "expo-router"
 import { useState, useEffect } from "react"
 import { Video } from "expo-av"
 
-const BASE_URL = "https://uresources.cravii.ng/"
+const BASE_URL = "https://ilearn.lsfort.ng/"
 
 const AllVideos = () => {
   const router = useRouter()

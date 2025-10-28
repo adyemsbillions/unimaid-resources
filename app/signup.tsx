@@ -22,7 +22,7 @@ import { useState, useEffect, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { width, height } = Dimensions.get("window");
-const BASE_URL = "https://uresources.cravii.ng/";
+const BASE_URL = "https://ilearn.lsfort.ng/";
 
 // Subjects from subjects.json
 const JAMB_SUBJECTS = [

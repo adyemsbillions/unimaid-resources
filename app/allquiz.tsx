@@ -25,7 +25,7 @@ interface StatusData {
   error?: string;
 }
 
-const BASE_URL = "https://uresources.cravii.ng/"
+const BASE_URL = "https://ilearn.lsfort.ng/"
 
 const AllQuizzes: React.FC = () => {
   const router = useRouter()

@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { WebView } from "react-native-webview";
 
-const BASE_URL = "https://uresources.cravii.ng/";
+const BASE_URL = "https://ilearn.lsfort.ng/";
 
 const QAViewAll = () => {
   const router = useRouter();

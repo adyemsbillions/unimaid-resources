@@ -18,7 +18,7 @@ import { useState, useEffect } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { Video } from "expo-av"
 
-const BASE_URL = "https://uresources.cravii.ng/"
+const BASE_URL = "https://ilearn.lsfort.ng/"
 const UPLOADS_PATH = `${BASE_URL}api/`
 
 const Dashboard = () => {
@@ -162,7 +162,7 @@ const Dashboard = () => {
   }
 
   const handleViewAllVideos = () => {
-    router.push("/qa-viewall")
+    router.push("/all_videos")
     console.log("View all videos pressed, navigating to /qa-viewall")
   }
 

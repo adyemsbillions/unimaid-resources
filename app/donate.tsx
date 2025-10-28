@@ -7,7 +7,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage"
 import * as WebBrowser from "expo-web-browser"
 import * as ImagePicker from "expo-image-picker"
 
-const BASE_URL = "https://uresources.cravii.ng/"
+const BASE_URL = "https://ilearn.lsfort.ng/"
 
 const Donate = () => {
   const router = useRouter()

@@ -6,7 +6,7 @@ import { useEffect, useState, useRef } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
 const { width, height } = Dimensions.get("window")
-const BASE_URL = "https://uresources.cravii.ng/"
+const BASE_URL = "https://ilearn.lsfort.ng/"
 
 export default function OnboardingScreen() {
   const router = useRouter()
@@ -124,7 +124,7 @@ export default function OnboardingScreen() {
         {/* Logo/Brand Area */}
         <View style={styles.brandContainer}>
           <View style={styles.logoPlaceholder}>
-            <Text style={styles.logoText}>Unimaid Resources</Text>
+            <Text style={styles.logoText}>Ilearn</Text>
           </View>
         </View>
 
