@@ -325,29 +325,35 @@ const Profile: React.FC = () => {
             )}
           </View>
         </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Settings</Text>
-          <View style={styles.settingsContainer}>
-            {[
-              { label: "Notifications", enabled: true },
-              { label: "Sound Effects", enabled: false },
-              { label: "Dark Mode", enabled: false },
-            ].map((setting, index) => (
-              <View key={index} style={styles.settingItem}>
-                <Text style={styles.settingLabel}>{setting.label}</Text>
-                <View style={[styles.toggle, { backgroundColor: setting.enabled ? "#6B46C1" : "#ccc" }]}>
-                  <View
-                    style={[
-                      styles.toggleCircle,
-                      { transform: [{ translateX: setting.enabled ? 18 : 2 }] },
-                    ]}
-                  />
-                </View>
-              </View>
-            ))}
-          </View>
+<View style={styles.section}>
+  <Text style={styles.sectionTitle}>Settings</Text>
+  <View style={styles.settingsContainer}>
+    {[
+      { label: "Notifications", enabled: true },
+    ].map((setting, index) => (
+      <View key={index} style={styles.settingItem}>
+        <Text style={styles.settingLabel}>{setting.label}</Text>
+        <View style={[styles.toggle, { backgroundColor: setting.enabled ? "#6B46C1" : "#ccc" }]}>
+          <View
+            style={[
+              styles.toggleCircle,
+              { transform: [{ translateX: setting.enabled ? 18 : 2 }] },
+            ]}
+          />
         </View>
+      </View>
+    ))}
+    <TouchableOpacity 
+      style={styles.settingItem}
+      onPress={() => router.push("/support")}
+    >
+      <View style={styles.settingRow}>
+        <Text style={styles.settingLabel}>Get Support</Text>
+        <Ionicons name="chevron-forward" size={20} color="#666" />
+      </View>
+    </TouchableOpacity>
+  </View>
+</View>
       </ScrollView>
 
       {/* Edit Profile Modal */}
