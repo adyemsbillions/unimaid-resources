@@ -1,45 +1,70 @@
-import { View, Text, StyleSheet, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Alert } from "react-native"
+"use client"
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  StatusBar,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  Modal,
+  TextInput,
+  Platform,
+} from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
 interface Stats {
-  quizzes_taken: number;
-  avg_score: number;
-  streak_days: number;
+  quizzes_taken: number
+  avg_score: number
+  streak_days: number
 }
 
 interface Achievement {
-  icon: string;
-  label: string;
-  bgColor: string;
+  icon: string
+  label: string
+  bgColor: string
 }
 
 interface Activity {
-  icon: string;
-  name: string;
-  score: number;
-  time: string;
-  bgColor: string;
+  icon: string
+  name: string
+  score: string
+  time: string
+  bgColor: string
 }
 
 interface UserData {
-  success: boolean;
-  username?: string;
-  subjects?: string[];
-  error?: string;
+  success: boolean
+  username?: string
+  subjects?: string[]
+  gender?: string
+  state?: string
+  age?: number
+  has_edited_profile?: boolean
+  error?: string
 }
 
 interface StatsData {
-  success: boolean;
-  stats: Stats;
-  achievements: Achievement[];
-  recentActivity: Activity[];
-  error?: string;
+  success: boolean
+  stats: Stats
+  achievements: Achievement[]
+  recentActivity: Activity[]
+  error?: string
 }
 
 const BASE_URL = "https://ilearn.lsfort.ng/"
+
+const NIGERIAN_STATES = [
+  "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue", "Borno",
+  "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu", "FCT", "Gombe",
+  "Imo", "Jigawa", "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara",
+  "Lagos", "Nasarawa", "Niger", "Ogun", "Ondo", "Osun", "Oyo", "Plateau",
+  "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara"
+]
 
 const Profile: React.FC = () => {
   const router = useRouter()
@@ -49,18 +74,23 @@ const Profile: React.FC = () => {
   const [stats, setStats] = useState<Stats>({ quizzes_taken: 0, avg_score: 0, streak_days: 0 })
   const [achievements, setAchievements] = useState<Achievement[]>([])
   const [recentActivity, setRecentActivity] = useState<Activity[]>([])
+  const [hasEditedProfile, setHasEditedProfile] = useState<boolean>(false)
+
+  // Edit modal state
+  const [editModalVisible, setEditModalVisible] = useState(false)
+  const [gender, setGender] = useState<string>("")
+  const [state, setState] = useState<string>("")
+  const [age, setAge] = useState<string>("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     const fetchUserData = async () => {
       try {
         const userId = await AsyncStorage.getItem("userId")
         if (!userId) {
-          console.log("No user logged in, navigating to /login")
           router.replace("/login")
           return
         }
-
-        console.log("Fetching user data for userId:", userId)
 
         const userResponse = await fetch(`${BASE_URL}api/get_user_data.php`, {
           method: "POST",
@@ -68,22 +98,22 @@ const Profile: React.FC = () => {
           body: JSON.stringify({ userId: parseInt(userId) }),
         })
         const userText = await userResponse.text()
-        console.log("User API Response:", userText)
         let userData: UserData
         try {
           userData = JSON.parse(userText)
-        } catch (jsonError) {
-          console.error("JSON Parse error (user):", jsonError, "Raw response:", userText)
+        } catch {
           throw new Error("Invalid JSON response from server")
         }
 
         if (userResponse.ok && userData.success) {
           setUserName(userData.username || "Unknown User")
           setSubjects(Array.isArray(userData.subjects) ? userData.subjects : [])
+          setGender(userData.gender || "")
+          setState(userData.state || "")
+          setAge(userData.age ? userData.age.toString() : "")
+          setHasEditedProfile(userData.has_edited_profile === true)
         } else {
           Alert.alert("Error", userData.error || "Failed to fetch user data")
-          setUserName("Unknown User")
-          setSubjects([])
           router.replace("/login")
           return
         }
@@ -94,28 +124,20 @@ const Profile: React.FC = () => {
           body: JSON.stringify({ userId: parseInt(userId) }),
         })
         const statsText = await statsResponse.text()
-        console.log("Stats API Response:", statsText)
         let statsData: StatsData
         try {
           statsData = JSON.parse(statsText)
-        } catch (jsonError) {
-          console.error("JSON Parse error (stats):", jsonError, "Raw response:", statsText)
+        } catch {
           throw new Error("Invalid JSON response from server")
         }
 
         if (statsResponse.ok && statsData.success) {
           setStats(statsData.stats)
           setAchievements(statsData.achievements || [])
-          setRecentActivity(statsData.recentActivity)
-          console.log("Achievements loaded:", statsData.achievements)
-        } else {
-          Alert.alert("Error", statsData.error || "Failed to fetch stats")
+          setRecentActivity(statsData.recentActivity || [])
         }
-      } catch (error) {
-        console.error("Error fetching data:", error)
-        Alert.alert("Error", `Network error occurred: ${error.message}`)
-        setUserName("Unknown User")
-        setSubjects([])
+      } catch (error: any) {
+        Alert.alert("Error", `Network error: ${error.message}`)
         router.replace("/login")
       } finally {
         setIsLoading(false)
@@ -124,23 +146,64 @@ const Profile: React.FC = () => {
     fetchUserData()
   }, [router])
 
-  const handleBack = () => {
-    router.push("/dashboard")
-    console.log("Back pressed, navigating to /dashboard")
+  const handleBack = () => router.push("/dashboard")
+  const handleLogout = async () => {
+    await AsyncStorage.removeItem("userId")
+    router.replace("/")
   }
 
-  const handleLogout = async () => {
+  const openEditModal = () => {
+    if (hasEditedProfile) {
+      Alert.alert("Profile Locked", "You can only edit your profile once.")
+      return
+    }
+    setEditModalVisible(true)
+  }
+
+  const closeEditModal = () => {
+    setEditModalVisible(false)
+  }
+
+  const handleSaveProfile = async () => {
+    if (!gender || !state || !age) {
+      Alert.alert("Incomplete", "Please fill in all fields.")
+      return
+    }
+    if (isNaN(parseInt(age)) || parseInt(age) < 10 || parseInt(age) > 100) {
+      Alert.alert("Invalid Age", "Please enter a valid age between 10 and 100.")
+      return
+    }
+
+    setIsSubmitting(true)
     try {
-      await AsyncStorage.removeItem("userId")
-      console.log("User logged out, navigating to /")
-      router.replace("/")
-    } catch (error) {
-      console.error("Logout error:", error)
-      Alert.alert("Error", "Failed to log out")
+      const userId = await AsyncStorage.getItem("userId")
+      const response = await fetch(`${BASE_URL}api/update_user_profile.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: parseInt(userId!),
+          gender,
+          state,
+          age: parseInt(age),
+        }),
+      })
+      const text = await response.text()
+      let result
+      try { result = JSON.parse(text) } catch { throw new Error("Invalid response") }
+
+      if (response.ok && result.success) {
+        setHasEditedProfile(true)
+        Alert.alert("Success", "Profile updated successfully!")
+        closeEditModal()
+      } else {
+        Alert.alert("Error", result.error || "Failed to update profile")
+      }
+    } catch (error: any) {
+      Alert.alert("Error", `Network error: ${error.message}`)
+    } finally {
+      setIsSubmitting(false)
     }
   }
-
-  console.log("Rendering Profile with userName:", userName, "subjects:", subjects, "isLoading:", isLoading)
 
   return (
     <SafeAreaView style={styles.container}>
@@ -154,6 +217,7 @@ const Profile: React.FC = () => {
           <Ionicons name="log-out-outline" size={24} color="#666" />
         </TouchableOpacity>
       </View>
+
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.profileContainer}>
           <View style={styles.avatarContainer}>
@@ -167,10 +231,17 @@ const Profile: React.FC = () => {
           </View>
           <Text style={styles.userName}>{isLoading ? "Loading..." : userName}</Text>
           <Text style={styles.userSubtitle}>Quiz Enthusiast</Text>
-          <TouchableOpacity style={styles.editButton}>
-            <Text style={styles.editButtonText}>Edit Profile</Text>
+          <TouchableOpacity
+            style={[styles.editButton, hasEditedProfile && styles.editButtonDisabled]}
+            onPress={openEditModal}
+            disabled={hasEditedProfile}
+          >
+            <Text style={styles.editButtonText}>
+              {hasEditedProfile ? "Profile Locked" : "Edit Profile"}
+            </Text>
           </TouchableOpacity>
         </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Your Stats</Text>
           <View style={styles.statsContainer}>
@@ -188,6 +259,7 @@ const Profile: React.FC = () => {
             </View>
           </View>
         </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Your Subjects</Text>
           <View style={styles.subjectsContainer}>
@@ -204,6 +276,7 @@ const Profile: React.FC = () => {
             )}
           </View>
         </View>
+
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Achievements</Text>
@@ -228,6 +301,7 @@ const Profile: React.FC = () => {
             )}
           </View>
         </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Recent Activity</Text>
           <View style={styles.activityContainer}>
@@ -241,6 +315,7 @@ const Profile: React.FC = () => {
                   </View>
                   <View style={styles.activityDetails}>
                     <Text style={styles.activityName}>{activity.name || "Unknown Activity"}</Text>
+                    <Text style={styles.activityScore}>{activity.score}</Text>
                   </View>
                   <Text style={styles.activityTime}>{activity.time || "N/A"}</Text>
                 </View>
@@ -250,6 +325,7 @@ const Profile: React.FC = () => {
             )}
           </View>
         </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Settings</Text>
           <View style={styles.settingsContainer}>
@@ -273,6 +349,95 @@ const Profile: React.FC = () => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Edit Profile Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={editModalVisible}
+        onRequestClose={closeEditModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Profile</Text>
+              <TouchableOpacity onPress={closeEditModal}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalScroll}>
+              {/* Gender */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Gender</Text>
+                <View style={styles.pickerContainer}>
+                  {["Male", "Female", "Prefer not to say"].map((option) => (
+                    <TouchableOpacity
+                      key={option}
+                      style={[styles.pickerOption, gender === option && styles.pickerOptionSelected]}
+                      onPress={() => setGender(option)}
+                    >
+                      <Text style={[styles.pickerText, gender === option && styles.pickerTextSelected]}>
+                        {option}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* State */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>State of Residence</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.stateScroll}>
+                  {NIGERIAN_STATES.map((stateName) => (
+                    <TouchableOpacity
+                      key={stateName}
+                      style={[styles.stateChip, state === stateName && styles.stateChipSelected]}
+                      onPress={() => setState(stateName)}
+                    >
+                      <Text style={[styles.stateChipText, state === stateName && styles.stateChipTextSelected]}>
+                        {stateName}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Age */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Age</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={age}
+                  onChangeText={setAge}
+                  keyboardType="number-pad"
+                  placeholder="Enter your age"
+                  maxLength={3}
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={closeEditModal}
+                disabled={isSubmitting}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton, isSubmitting && styles.saveButtonDisabled]}
+                onPress={handleSaveProfile}
+                disabled={isSubmitting}
+              >
+                <Text style={styles.saveButtonText}>
+                  {isSubmitting ? "Saving..." : "Save Changes"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -343,6 +508,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 30,
     borderRadius: 8,
+  },
+  editButtonDisabled: {
+    backgroundColor: "#ccc",
   },
   editButtonText: {
     color: "#fff",
@@ -472,6 +640,11 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#333",
   },
+  activityScore: {
+    fontSize: 12,
+    color: "#6B46C1",
+    fontWeight: "600",
+  },
   activityTime: {
     fontSize: 12,
     color: "#999",
@@ -510,6 +683,139 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     padding: 10,
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    width: "90%",
+    maxHeight: "85%",
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  modalScroll: {
+    padding: 20,
+  },
+  inputGroup: {
+    marginBottom: 24,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 10,
+  },
+  pickerContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  pickerOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#fff",
+  },
+  pickerOptionSelected: {
+    backgroundColor: "#6B46C1",
+    borderColor: "#6B46C1",
+  },
+  pickerText: {
+    color: "#666",
+    fontSize: 14,
+  },
+  pickerTextSelected: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  stateScroll: {
+    maxHeight: 120,
+  },
+  stateChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#fff",
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  stateChipSelected: {
+    backgroundColor: "#6B46C1",
+    borderColor: "#6B46C1",
+  },
+  stateChipText: {
+    color: "#666",
+    fontSize: 13,
+  },
+  stateChipTextSelected: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: "#fff",
+  },
+  modalFooter: {
+    flexDirection: "row",
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  cancelButton: {
+    backgroundColor: "#f0f0f0",
+  },
+  cancelButtonText: {
+    color: "#666",
+    fontWeight: "600",
+  },
+  saveButton: {
+    backgroundColor: "#6B46C1",
+  },
+  saveButtonDisabled: {
+    backgroundColor: "#ccc",
+  },
+  saveButtonText: {
+    color: "#fff",
+    fontWeight: "600",
   },
 })
 
