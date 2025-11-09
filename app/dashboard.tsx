@@ -73,16 +73,21 @@ interface UserData {
   error?: string
 }
 
+interface CarouselSlide {
+  id: number
+  title: string
+  subtitle: string
+  color: string
+  icon: string
+}
+
 const Dashboard = () => {
   const router = useRouter()
   const [username, setUsername] = useState("Guest")
   const [subjects, setSubjects] = useState<string[]>([])
   const [categories, setCategories] = useState<CategoryUI[]>([])
-  const [stats, setStats] = useState<Stats>({
-    quizzes_taken: 0,
-    avg_score: 0,
-    streak_days: 0,
-  })
+  const [stats, setStats] = useState<Stats>({ quizzes_taken: 0, avg_score: 0, streak_days: 0 })
+  const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [selectedVideo, setSelectedVideo] = useState<any>(null)
@@ -93,22 +98,28 @@ const Dashboard = () => {
   const [currentAdsSlide, setCurrentAdsSlide] = useState(0)
 
   const videoRef = useRef<Video>(null)
-  const adsScrollRef = useRef<ScrollView>(null)
 
-  const ads = [
-    { id: 1, title: "Unlock Premium", subtitle: "Access all courses & live classes", color: COLORS.primary, icon: "star" },
-    { id: 2, title: "Score 300+ in JAMB", subtitle: "Expert guidance & past questions", color: COLORS.success, icon: "trophy" },
-    { id: 3, title: "Live Classes Daily", subtitle: "Join expert tutors at 6 PM", color: COLORS.primaryDark, icon: "videocam" },
-  ]
+  // ---------- FETCH CAROUSEL ----------
+  const fetchCarousel = useCallback(async (isPull = false) => {
+    if (!isPull) setIsLoading(true)
+    try {
+      const res = await fetch(`${BASE_URL}api/fetch_carousel.php`)
+      const json = await res.json()
+      if (json.success && Array.isArray(json.data)) {
+        setCarouselSlides(json.data)
+      }
+    } catch (e) {
+      console.error("Carousel fetch error:", e)
+    } finally {
+      if (!isPull) setIsLoading(false)
+    }
+  }, [])
 
   // ---------- FETCH USER ----------
   const fetchUser = useCallback(async () => {
     try {
       const userId = await AsyncStorage.getItem("userId")
-      if (!userId) {
-        router.replace("/login")
-        return
-      }
+      if (!userId) { router.replace("/login"); return }
 
       const res = await fetch(`${BASE_URL}api/get_user.php`, {
         method: "POST",
@@ -116,19 +127,15 @@ const Dashboard = () => {
         body: JSON.stringify({ userId: parseInt(userId) }),
       })
       const json = await res.json()
-      if (json.success) {
-        setUsername(json.username || "User")
-      } else {
-        Alert.alert("Error", json.error || "Failed to load user")
-        router.replace("/login")
-      }
+      if (json.success) setUsername(json.username || "User")
+      else { Alert.alert("Error", json.error || "Failed to load user"); router.replace("/login") }
     } catch (e) {
       console.error("Failed to fetch user:", e)
       Alert.alert("Error", "Check internet or login again")
     }
   }, [router])
 
-  // ---------- FETCH USER DATA (for subjects) ----------
+  // ---------- FETCH USER DATA ----------
   const fetchUserData = useCallback(async () => {
     try {
       const userId = await AsyncStorage.getItem("userId")
@@ -141,20 +148,11 @@ const Dashboard = () => {
       })
       const text = await res.text()
       let json: UserData
-      try {
-        json = JSON.parse(text)
-      } catch {
-        console.error("Invalid JSON from get_user_data.php")
-        return
-      }
+      try { json = JSON.parse(text) } catch { console.error("Invalid JSON"); return }
 
-      if (json.success && Array.isArray(json.subjects)) {
-        setSubjects(json.subjects)
-      }
-    } catch (e) {
-      console.error("Failed to fetch user data:", e)
-    }
-  }, [])
+      if (json.success && Array.isArray(json.subjects)) setSubjects(json.subjects)
+    } catch (e) { console.error("Failed to fetch user data:", e) }
+  }, [router])
 
   // ---------- FETCH USER STATS ----------
   const fetchUserStats = useCallback(async () => {
@@ -176,10 +174,8 @@ const Dashboard = () => {
           streak_days: json.stats.streak_days || 0,
         })
       }
-    } catch (e) {
-      console.error("Failed to fetch stats:", e)
-    }
-  }, [])
+    } catch (e) { console.error("Failed to fetch stats:", e) }
+  }, [router])
 
   // ---------- FETCH CATEGORIES ----------
   const fetchCategories = useCallback(async (isPull = false) => {
@@ -208,14 +204,15 @@ const Dashboard = () => {
       setIsLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [router])
 
   useEffect(() => {
     fetchUser()
     fetchUserData()
     fetchCategories()
     fetchUserStats()
-  }, [fetchUser, fetchUserData, fetchCategories, fetchUserStats])
+    fetchCarousel()
+  }, [fetchUser, fetchUserData, fetchCategories, fetchUserStats, fetchCarousel])
 
   // ---------- ICON FALLBACK ----------
   const getIcon = (name: string): keyof typeof Ionicons.glyphMap => {
@@ -271,13 +268,72 @@ const Dashboard = () => {
 
   const dismissWarningModal = () => setWarningModalVisible(false)
 
-  // ---------- ADS: Manual Scroll Only ----------
-  const handleAdsScroll = (e: any) => {
-    const slide = Math.round(e.nativeEvent.contentOffset.x / (screenWidth - 32))
-    setCurrentAdsSlide(slide)
+  // ---------- AUTO-FADE CAROUSEL (LIKE WELCOME CARD) ----------
+  const AdsCarousel = () => {
+    if (carouselSlides.length === 0) return null
+
+    const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+    useEffect(() => {
+      intervalRef.current = setInterval(() => {
+        setCurrentAdsSlide((prev) => (prev + 1) % carouselSlides.length)
+      }, 4000)
+
+      return () => {
+        if (intervalRef.current) clearInterval(intervalRef.current)
+      }
+    }, [carouselSlides.length])
+
+    return (
+      <View style={styles.carouselContainer}>
+        <View style={styles.adFadeWrapper}>
+          {carouselSlides.map((ad, index) => (
+            <View
+              key={ad.id}
+              style={[
+                styles.adFadeItem,
+                {
+                  opacity: currentAdsSlide === index ? 1 : 0,
+                  zIndex: currentAdsSlide === index ? 1 : 0,
+                },
+              ]}
+              pointerEvents="none"
+            >
+              <View style={[styles.adCardGradient, { backgroundColor: ad.color }]}>
+                <Ionicons
+                  name={ad.icon as any}
+                  size={80}
+                  color="rgba(255,255,255,0.1)"
+                  style={styles.adCardIcon}
+                />
+                <View style={styles.adCardContent}>
+                  <Text style={styles.adCardTitle}>{ad.title}</Text>
+                  <Text style={styles.adCardSubtitle}>{ad.subtitle}</Text>
+                  <TouchableOpacity style={styles.adCardButton}>
+                    <Text style={styles.adCardButtonText}>Learn More</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.adsDots}>
+          {carouselSlides.map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.adsDot,
+                currentAdsSlide === i && styles.adsDotsActive,
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+    )
   }
 
-  // ---------- CATEGORIES GRID (4 RANDOM) ----------
+  // ---------- CATEGORIES GRID ----------
   const CategorySection = () => {
     if (isLoading && !refreshing) return null
     if (categories.length === 0) {
@@ -339,41 +395,7 @@ const Dashboard = () => {
     )
   }
 
-  // ---------- ADS CAROUSEL ----------
-  const AdsCarousel = () => (
-    <View style={styles.section}>
-      <ScrollView
-        ref={adsScrollRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={handleAdsScroll}
-        style={styles.adsScroll}
-      >
-        {ads.map((ad) => (
-          <View key={ad.id} style={[styles.adCard, { width: screenWidth - 32 }]}>
-            <View style={[styles.adCardGradient, { backgroundColor: ad.color }]}>
-              <Ionicons name={ad.icon as any} size={80} color="rgba(255,255,255,0.1)" style={styles.adCardIcon} />
-              <View style={styles.adCardContent}>
-                <Text style={styles.adCardTitle}>{ad.title}</Text>
-                <Text style={styles.adCardSubtitle}>{ad.subtitle}</Text>
-                <TouchableOpacity style={styles.adCardButton}>
-                  <Text style={styles.adCardButtonText}>Learn More</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-      <View style={styles.adsDots}>
-        {ads.map((_, i) => (
-          <View key={i} style={[styles.adsDot, currentAdsSlide === i && styles.adsDotsActive]} />
-        ))}
-      </View>
-    </View>
-  )
-
-  // ---------- SUPPORT CARD (NEW) ----------
+  // ---------- SUPPORT CARD ----------
   const SupportCard = () => (
     <View style={styles.section}>
       <View style={styles.supportCard}>
@@ -385,7 +407,7 @@ const Dashboard = () => {
         />
         <View style={styles.supportContent}>
           <Text style={styles.supportText}>
-            Are you or someone you know facing mental health struggles, child abuse, or sexual abuse? You can get help — speak up, support is here for you.
+            Facing abuse or mental distress? Speak up — support awaits.
           </Text>
           <TouchableOpacity style={styles.supportButton}>
             <Text style={styles.supportButtonText}>Get Help</Text>
@@ -446,6 +468,7 @@ const Dashboard = () => {
               fetchCategories(true)
               fetchUserData()
               fetchUserStats()
+              fetchCarousel(true)
             }}
             colors={[COLORS.primary]}
             tintColor={COLORS.primary}
@@ -474,10 +497,8 @@ const Dashboard = () => {
 
             <CategorySection />
 
-            {/* SUPPORT CARD */}
             <SupportCard />
 
-            {/* YOUR SUBJECTS */}
             <YourSubjectsSection />
 
             <View style={styles.section}>
@@ -604,24 +625,69 @@ const styles = StyleSheet.create({
   welcomeSubtext: { fontSize: 13, color: "rgba(255,255,255,0.9)", fontWeight: "500" },
   welcomeIllustration: { width: 76, height: 76, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.25)", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.3)" },
   section: { paddingHorizontal: 16, marginBottom: 32 },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-  sectionTitle: { fontSize: 20, fontWeight: "900", color: COLORS.text, letterSpacing: -0.4 },
-  viewAllLink: { fontSize: 13, color: COLORS.primary, fontWeight: "700" },
-  adsScroll: { marginHorizontal: -16 },
-  adCard: { paddingHorizontal: 16 },
-  adCardGradient: { borderRadius: 20, padding: 24, overflow: "hidden" },
-  adCardIcon: { position: "absolute", right: -30, top: -30, opacity: 0.12 },
+  carouselContainer: { marginHorizontal: 16, marginBottom: 32 },
+  adFadeWrapper: { height: 160, borderRadius: 20, overflow: "hidden", position: "relative" },
+  adFadeItem: { ...StyleSheet.absoluteFillObject, transition: "opacity 600ms ease-in-out" },
+  adCardGradient: { 
+    ...StyleSheet.absoluteFillObject,
+    padding: 24,
+  },
+  adCardIcon: { 
+    position: "absolute", 
+    right: -30, 
+    top: -30, 
+    opacity: 0.12 
+  },
   adCardContent: { zIndex: 1 },
-  adCardTitle: { fontSize: 24, fontWeight: "900", color: "#FFF", marginBottom: 8, letterSpacing: -0.3 },
-  adCardSubtitle: { fontSize: 14, color: "rgba(255,255,255,0.92)", fontWeight: "500", marginBottom: 16 },
-  adCardButton: { backgroundColor: "rgba(255,255,255,0.22)", paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, alignSelf: "flex-start", borderWidth: 1, borderColor: "rgba(255,255,255,0.35)" },
-  adCardButtonText: { color: "#FFF", fontWeight: "700", fontSize: 13, letterSpacing: 0.3 },
-  adsDots: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 20 },
-  adsDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#CBD5E1" },
-  adsDotsActive: { backgroundColor: COLORS.primary, width: 28 },
+  adCardTitle: { 
+    fontSize: 24, 
+    fontWeight: "900", 
+    color: "#FFF", 
+    marginBottom: 8, 
+    letterSpacing: -0.3 
+  },
+  adCardSubtitle: { 
+    fontSize: 14, 
+    color: "rgba(255,255,255,0.92)", 
+    fontWeight: "500", 
+    marginBottom: 16 
+  },
+  adCardButton: { 
+    backgroundColor: "rgba(255,255,255,0.22)", 
+    paddingVertical: 12, 
+    paddingHorizontal: 20, 
+    borderRadius: 12, 
+    alignSelf: "flex-start", 
+    borderWidth: 1, 
+    borderColor: "rgba(255,255,255,0.35)" 
+  },
+  adCardButtonText: { 
+    color: "#FFF", 
+    fontWeight: "700", 
+    fontSize: 13, 
+    letterSpacing: 0.3 
+  },
+  adsDots: { 
+    flexDirection: "row", 
+    justifyContent: "center", 
+    alignItems: "center", 
+    gap: 8, 
+    marginTop: 20 
+  },
+  adsDot: { 
+    width: 8, 
+    height: 8, 
+    borderRadius: 4, 
+    backgroundColor: "#CBD5E1" 
+  },
+  adsDotsActive: { 
+    backgroundColor: COLORS.primary, 
+    width: 28 
+  },
   categorySection: { paddingHorizontal: 16, marginBottom: 32 },
   categoryHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   categoryTitle: { fontSize: 20, fontWeight: "900", color: COLORS.text, letterSpacing: -0.4 },
+  viewAllLink: { fontSize: 13, color: COLORS.primary, fontWeight: "700" },
   categoryGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 12 },
   categoryCard: { width: "48%", height: 140, borderRadius: 16, overflow: "hidden", position: "relative" },
   categoryImageBackground: { ...StyleSheet.absoluteFillObject },
@@ -686,7 +752,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
 
-  // NEW: Support Card
+  // SUPPORT CARD
   supportCard: {
     marginHorizontal: 16,
     borderRadius: 16,
@@ -696,33 +762,32 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    minHeight: 120,
+    height: 100,
   },
   supportContent: {
-    padding: 20,
-    justifyContent: "space-between",
     flex: 1,
+    padding: 16,
+    justifyContent: "center",
   },
   supportText: {
     color: "#FFF",
-    fontSize: 14,
-    lineHeight: 22,
-    fontWeight: "500",
-    flexShrink: 1,
-    marginBottom: 16,
+    fontSize: 13.5,
+    lineHeight: 19,
+    fontWeight: "600",
+    marginBottom: 8,
   },
   supportButton: {
     backgroundColor: "rgba(255,255,255,0.25)",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 6,
+    borderRadius: 8,
     alignSelf: "flex-start",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.4)",
   },
   supportButtonText: {
     color: "#FFF",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
   },
 })
