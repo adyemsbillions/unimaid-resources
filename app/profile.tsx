@@ -1,4 +1,6 @@
 "use client"
+import type React from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
   View,
   Text,
@@ -10,11 +12,9 @@ import {
   Alert,
   Modal,
   TextInput,
-  Platform,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
-import { useEffect, useState } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
 interface Stats {
@@ -63,7 +63,7 @@ const NIGERIAN_STATES = [
   "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu", "FCT", "Gombe",
   "Imo", "Jigawa", "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara",
   "Lagos", "Nasarawa", "Niger", "Ogun", "Ondo", "Osun", "Oyo", "Plateau",
-  "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara"
+  "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara",
 ]
 
 const Profile: React.FC = () => {
@@ -83,75 +83,114 @@ const Profile: React.FC = () => {
   const [age, setAge] = useState<string>("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const userId = await AsyncStorage.getItem("userId")
-        if (!userId) {
-          router.replace("/login")
-          return
-        }
-
-        const userResponse = await fetch(`${BASE_URL}api/get_user_data.php`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: parseInt(userId) }),
-        })
-        const userText = await userResponse.text()
-        let userData: UserData
-        try {
-          userData = JSON.parse(userText)
-        } catch {
-          throw new Error("Invalid JSON response from server")
-        }
-
-        if (userResponse.ok && userData.success) {
-          setUserName(userData.username || "Unknown User")
-          setSubjects(Array.isArray(userData.subjects) ? userData.subjects : [])
-          setGender(userData.gender || "")
-          setState(userData.state || "")
-          setAge(userData.age ? userData.age.toString() : "")
-          setHasEditedProfile(userData.has_edited_profile === true)
-        } else {
-          Alert.alert("Error", userData.error || "Failed to fetch user data")
-          router.replace("/login")
-          return
-        }
-
-        const statsResponse = await fetch(`${BASE_URL}api/get_user_stats.php`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: parseInt(userId) }),
-        })
-        const statsText = await statsResponse.text()
-        let statsData: StatsData
-        try {
-          statsData = JSON.parse(statsText)
-        } catch {
-          throw new Error("Invalid JSON response from server")
-        }
-
-        if (statsResponse.ok && statsData.success) {
-          setStats(statsData.stats)
-          setAchievements(statsData.achievements || [])
-          setRecentActivity(statsData.recentActivity || [])
-        }
-      } catch (error: any) {
-        Alert.alert("Error", `Network error: ${error.message}`)
-        router.replace("/login")
-      } finally {
-        setIsLoading(false)
+  // ---------- FETCH USER ----------
+  const fetchUser = useCallback(async () => {
+    try {
+      const userId = await AsyncStorage.getItem("userId")
+      if (!userId) {
+        router.replace("/")
+        return
       }
+
+      const res = await fetch(`${BASE_URL}api/get_user.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: parseInt(userId) }),
+      })
+      const json = await res.json()
+
+      if (json.success) {
+        setUserName(json.username || "User")
+      } else {
+        Alert.alert("Error", json.error || "Failed to load user")
+        router.replace("/")
+      }
+    } catch (e) {
+      console.error("Failed to fetch user:", e)
+      Alert.alert("Error", "Check internet or login again")
     }
-    fetchUserData()
   }, [router])
 
-  const handleBack = () => router.push("/dashboard")
+  // ---------- FETCH USER DATA (subjects, gender, etc.) ----------
+  const fetchUserData = useCallback(async () => {
+    try {
+      const userId = await AsyncStorage.getItem("userId")
+      if (!userId) return
+
+      const res = await fetch(`${BASE_URL}api/get_user_data.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: parseInt(userId) }),
+      })
+      const text = await res.text()
+      let json: UserData
+      try {
+        json = JSON.parse(text)
+      } catch {
+        console.error("Invalid JSON from get_user_data.php")
+        return
+      }
+
+      if (json.success) {
+        setSubjects(json.subjects || [])
+        setGender(json.gender || "")
+        setState(json.state || "")
+        setAge(json.age ? json.age.toString() : "")
+        setHasEditedProfile(!!json.has_edited_profile)
+      }
+    } catch (e) {
+      console.error("Failed to fetch user data:", e)
+    }
+  }, [])
+
+  // ---------- FETCH STATS ----------
+  const fetchStats = useCallback(async () => {
+    try {
+      const userId = await AsyncStorage.getItem("userId")
+      if (!userId) return
+
+      const res = await fetch(`${BASE_URL}api/get_user_stats.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: parseInt(userId) }),
+      })
+      const json = await res.json()
+
+      if (json.success && json.stats) {
+        setStats({
+          quizzes_taken: json.stats.quizzes_taken || 0,
+          avg_score: Math.round(json.stats.avg_score || 0),
+          streak_days: json.stats.streak_days || 0,
+        })
+        setAchievements(json.achievements || [])
+        setRecentActivity(json.recentActivity || [])
+      }
+    } catch (e) {
+      console.error("Failed to fetch stats:", e)
+    }
+  }, [])
+
+  // ---------- LOAD ALL DATA ----------
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true)
+      await Promise.all([
+        fetchUser(),
+        fetchUserData(),
+        fetchStats(),
+      ])
+      setIsLoading(false)
+    }
+    loadData()
+  }, [fetchUser, fetchUserData, fetchStats])
+
+  // ---------- LOGOUT ----------
   const handleLogout = async () => {
     await AsyncStorage.removeItem("userId")
     router.replace("/")
   }
 
+  // ---------- EDIT PROFILE ----------
   const openEditModal = () => {
     if (hasEditedProfile) {
       Alert.alert("Profile Locked", "You can only edit your profile once.")
@@ -169,11 +208,10 @@ const Profile: React.FC = () => {
       Alert.alert("Incomplete", "Please fill in all fields.")
       return
     }
-    if (isNaN(parseInt(age)) || parseInt(age) < 10 || parseInt(age) > 100) {
+    if (isNaN(Number.parseInt(age)) || Number.parseInt(age) < 10 || Number.parseInt(age) > 100) {
       Alert.alert("Invalid Age", "Please enter a valid age between 10 and 100.")
       return
     }
-
     setIsSubmitting(true)
     try {
       const userId = await AsyncStorage.getItem("userId")
@@ -181,18 +219,22 @@ const Profile: React.FC = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: parseInt(userId!),
+          userId: Number.parseInt(userId!),
           gender,
           state,
-          age: parseInt(age),
+          age: Number.parseInt(age),
         }),
       })
       const text = await response.text()
       let result
-      try { result = JSON.parse(text) } catch { throw new Error("Invalid response") }
-
+      try {
+        result = JSON.parse(text)
+      } catch {
+        throw new Error("Invalid response")
+      }
       if (response.ok && result.success) {
         setHasEditedProfile(true)
+        await fetchUserData() // Refresh data
         Alert.alert("Success", "Profile updated successfully!")
         closeEditModal()
       } else {
@@ -207,59 +249,77 @@ const Profile: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="light-content" backgroundColor="#1a1a2e" />
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconButton} onPress={handleBack}>
-          <Ionicons name="arrow-back-outline" size={24} color="#666" />
+        <TouchableOpacity style={styles.iconButton} onPress={() => router.push("/dashboard")}>
+          <Ionicons name="arrow-back-outline" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
         <TouchableOpacity style={styles.iconButton} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={24} color="#666" />
+          <Ionicons name="log-out-outline" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* PROFILE CARD */}
         <View style={styles.profileContainer}>
           <View style={styles.avatarContainer}>
             {isLoading ? (
               <Text style={styles.avatarText}>...</Text>
             ) : (
               <Text style={styles.avatarText}>
-                {userName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                {userName
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase()}
               </Text>
             )}
           </View>
           <Text style={styles.userName}>{isLoading ? "Loading..." : userName}</Text>
-          <Text style={styles.userSubtitle}>Quiz Enthusiast</Text>
+          <Text style={styles.userSubtitle}>Quiz Enthusiast • Keep Learning</Text>
           <TouchableOpacity
             style={[styles.editButton, hasEditedProfile && styles.editButtonDisabled]}
             onPress={openEditModal}
             disabled={hasEditedProfile}
           >
+            <Ionicons name="pencil-outline" size={16} color="#fff" />
             <Text style={styles.editButtonText}>
               {hasEditedProfile ? "Profile Locked" : "Edit Profile"}
             </Text>
           </TouchableOpacity>
         </View>
 
+        {/* YOUR STATS */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Your Stats</Text>
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
+              <View style={styles.statIconContainer}>
+                <Ionicons name="document-text" size={20} color="#FF6B6B" />
+              </View>
               <Text style={styles.statValue}>{stats.quizzes_taken}</Text>
-              <Text style={styles.statLabel}>Quizzes Taken</Text>
+              <Text style={styles.statLabel}>Quizzes</Text>
             </View>
             <View style={styles.statItem}>
+              <View style={styles.statIconContainer}>
+                <Ionicons name="star" size={20} color="#FFD93D" />
+              </View>
               <Text style={styles.statValue}>{stats.avg_score}%</Text>
               <Text style={styles.statLabel}>Avg Score</Text>
             </View>
             <View style={styles.statItem}>
+              <View style={styles.statIconContainer}>
+                <Ionicons name="flame" size={20} color="#FF8C42" />
+              </View>
               <Text style={styles.statValue}>{stats.streak_days}</Text>
-              <Text style={styles.statLabel}>Streak Days</Text>
+              <Text style={styles.statLabel}>Streak</Text>
             </View>
           </View>
         </View>
 
+        {/* YOUR SUBJECTS */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Your Subjects</Text>
           <View style={styles.subjectsContainer}>
@@ -277,6 +337,7 @@ const Profile: React.FC = () => {
           </View>
         </View>
 
+        {/* ACHIEVEMENTS */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Achievements</Text>
@@ -290,10 +351,10 @@ const Profile: React.FC = () => {
             ) : achievements.length > 0 ? (
               achievements.map((achievement, index) => (
                 <View key={index} style={styles.achievementItem}>
-                  <View style={[styles.achievementIcon, { backgroundColor: achievement.bgColor || "#E5E7EB" }]}>
-                    <Ionicons name={achievement.icon || "help-circle"} size={24} color="#333" />
+                  <View style={[styles.achievementIcon, { backgroundColor: achievement.bgColor }]}>
+                    <Ionicons name={achievement.icon as any} size={24} color="#333" />
                   </View>
-                  <Text style={styles.achievementLabel}>{achievement.label || "Unknown Achievement"}</Text>
+                  <Text style={styles.achievementLabel}>{achievement.label}</Text>
                 </View>
               ))
             ) : (
@@ -302,6 +363,7 @@ const Profile: React.FC = () => {
           </View>
         </View>
 
+        {/* RECENT ACTIVITY */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Recent Activity</Text>
           <View style={styles.activityContainer}>
@@ -310,14 +372,14 @@ const Profile: React.FC = () => {
             ) : recentActivity.length > 0 ? (
               recentActivity.map((activity, index) => (
                 <View key={index} style={styles.activityItem}>
-                  <View style={[styles.activityIcon, { backgroundColor: activity.bgColor || "#E5E7EB" }]}>
-                    <Ionicons name={activity.icon || "school"} size={20} color="#333" />
+                  <View style={[styles.activityIcon, { backgroundColor: activity.bgColor }]}>
+                    <Ionicons name={activity.icon as any} size={20} color="#333" />
                   </View>
                   <View style={styles.activityDetails}>
-                    <Text style={styles.activityName}>{activity.name || "Unknown Activity"}</Text>
+                    <Text style={styles.activityName}>{activity.name}</Text>
                     <Text style={styles.activityScore}>{activity.score}</Text>
                   </View>
-                  <Text style={styles.activityTime}>{activity.time || "N/A"}</Text>
+                  <Text style={styles.activityTime}>{activity.time}</Text>
                 </View>
               ))
             ) : (
@@ -325,44 +387,31 @@ const Profile: React.FC = () => {
             )}
           </View>
         </View>
-<View style={styles.section}>
-  <Text style={styles.sectionTitle}>Settings</Text>
-  <View style={styles.settingsContainer}>
-    {[
-      { label: "Notifications", enabled: true },
-    ].map((setting, index) => (
-      <View key={index} style={styles.settingItem}>
-        <Text style={styles.settingLabel}>{setting.label}</Text>
-        <View style={[styles.toggle, { backgroundColor: setting.enabled ? "#6B46C1" : "#ccc" }]}>
-          <View
-            style={[
-              styles.toggleCircle,
-              { transform: [{ translateX: setting.enabled ? 18 : 2 }] },
-            ]}
-          />
+
+        {/* SETTINGS */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Settings</Text>
+          <View style={styles.settingsContainer}>
+            {[{ label: "Notifications", enabled: true }].map((setting, index) => (
+              <View key={index} style={styles.settingItem}>
+                <Text style={styles.settingLabel}>{setting.label}</Text>
+                <View style={[styles.toggle, { backgroundColor: setting.enabled ? "#6B46C1" : "#ccc" }]}>
+                  <View style={[styles.toggleCircle, { transform: [{ translateX: setting.enabled ? 18 : 2 }] }]} />
+                </View>
+              </View>
+            ))}
+            <TouchableOpacity style={styles.settingItem} onPress={() => router.push("/support")}>
+              <View style={styles.settingRow}>
+                <Text style={styles.settingLabel}>Get Support</Text>
+                <Ionicons name="chevron-forward" size={20} color="#666" />
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    ))}
-    <TouchableOpacity 
-      style={styles.settingItem}
-      onPress={() => router.push("/support")}
-    >
-      <View style={styles.settingRow}>
-        <Text style={styles.settingLabel}>Get Support</Text>
-        <Ionicons name="chevron-forward" size={20} color="#666" />
-      </View>
-    </TouchableOpacity>
-  </View>
-</View>
       </ScrollView>
 
-      {/* Edit Profile Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={editModalVisible}
-        onRequestClose={closeEditModal}
-      >
+      {/* EDIT PROFILE MODAL */}
+      <Modal animationType="slide" transparent={true} visible={editModalVisible} onRequestClose={closeEditModal}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -371,7 +420,6 @@ const Profile: React.FC = () => {
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
-
             <ScrollView style={styles.modalScroll}>
               {/* Gender */}
               <View style={styles.inputGroup}>
@@ -448,259 +496,203 @@ const Profile: React.FC = () => {
   )
 }
 
+// === STYLES (unchanged) ===
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F7F7F7",
-  },
+  container: { flex: 1, backgroundColor: "#f8f9fb" },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 15,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    backgroundColor: "#1a1a2e",
+    borderBottomWidth: 0,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  iconButton: {
-    padding: 5,
-  },
-  scrollView: {
-    flex: 1,
-  },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: "#fff" },
+  iconButton: { padding: 5 },
+  scrollView: { flex: 1 },
   profileContainer: {
     backgroundColor: "#fff",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 20,
+    borderRadius: 20,
+    paddingVertical: 32,
+    paddingHorizontal: 20,
     alignItems: "center",
-    marginHorizontal: 20,
-    marginVertical: 15,
+    marginHorizontal: 16,
+    marginVertical: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
   },
   avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     backgroundColor: "#6B46C1",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 16,
+    shadowColor: "#6B46C1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  avatarText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  userName: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 5,
-  },
-  userSubtitle: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 15,
-  },
+  avatarText: { fontSize: 32, fontWeight: "700", color: "#fff" },
+  userName: { fontSize: 24, fontWeight: "700", color: "#1a1a2e", marginBottom: 4 },
+  userSubtitle: { fontSize: 14, color: "#999", marginBottom: 20 },
   editButton: {
     backgroundColor: "#6B46C1",
-    paddingVertical: 10,
-    paddingHorizontal: 30,
-    borderRadius: 8,
-  },
-  editButtonDisabled: {
-    backgroundColor: "#ccc",
-  },
-  editButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  section: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 10,
-  },
-  sectionHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
     alignItems: "center",
-    marginBottom: 10,
+    gap: 8,
   },
-  viewAllText: {
-    fontSize: 14,
-    color: "#6B46C1",
-    fontWeight: "500",
-  },
+  editButtonDisabled: { backgroundColor: "#ccc" },
+  editButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  section: { marginHorizontal: 16, marginBottom: 24 },
+  sectionTitle: { fontSize: 18, fontWeight: "700", color: "#1a1a2e", marginBottom: 12 },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  viewAllText: { fontSize: 14, color: "#6B46C1", fontWeight: "600" },
   statsContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     backgroundColor: "#fff",
+    borderRadius: 16,
+    paddingVertical: 20,
+    paddingHorizontal: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  statItem: { flex: 1, alignItems: "center", paddingHorizontal: 8 },
+  statIconContainer: {
+    width: 40,
+    height: 40,
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 15,
-  },
-  statItem: {
-    flex: 1,
+    backgroundColor: "#f8f9fb",
+    justifyContent: "center",
     alignItems: "center",
+    marginBottom: 8,
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#6B46C1",
-    marginBottom: 5,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#666",
-  },
+  statValue: { fontSize: 22, fontWeight: "700", color: "#1a1a2e", marginBottom: 4 },
+  statLabel: { fontSize: 11, color: "#999", fontWeight: "500" },
   subjectsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
     backgroundColor: "#fff",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 15,
-    justifyContent: "center",
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    justifyContent: "flex-start",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
   subjectItem: {
     backgroundColor: "#EDE9FE",
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 16,
-    margin: 5,
+    margin: 6,
   },
-  subjectText: {
-    fontSize: 14,
-    color: "#6B46C1",
-    fontWeight: "500",
-  },
+  subjectText: { fontSize: 13, color: "#6B46C1", fontWeight: "600" },
   achievementsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
     backgroundColor: "#fff",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 15,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
   achievementItem: {
-    width: "100%",
+    width: "48%",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: "#f8f9fb",
+    borderRadius: 12,
   },
   achievementIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 50,
+    height: 50,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 5,
+    marginBottom: 8,
   },
-  achievementLabel: {
-    fontSize: 12,
-    color: "#666",
-    textAlign: "center",
-  },
+  achievementLabel: { fontSize: 12, color: "#666", textAlign: "center", fontWeight: "500" },
   activityContainer: {
     backgroundColor: "#fff",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 15,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
   activityItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
   },
   activityIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
   },
-  activityDetails: {
-    flex: 1,
-    marginLeft: 10,
-  },
-  activityName: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
-  },
-  activityScore: {
-    fontSize: 12,
-    color: "#6B46C1",
-    fontWeight: "600",
-  },
-  activityTime: {
-    fontSize: 12,
-    color: "#999",
-  },
+  activityDetails: { flex: 1, marginLeft: 12 },
+  activityName: { fontSize: 13, fontWeight: "600", color: "#1a1a2e" },
+  activityScore: { fontSize: 11, color: "#6B46C1", fontWeight: "600", marginTop: 2 },
+  activityTime: { fontSize: 11, color: "#999" },
   settingsContainer: {
     backgroundColor: "#fff",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 15,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
   settingItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 10,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
   },
-  settingLabel: {
-    fontSize: 14,
-    color: "#333",
-  },
-  toggle: {
-    width: 44,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: "center",
-  },
-  toggleCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "#fff",
-  },
-  noDataText: {
-    fontSize: 14,
-    color: "#666",
-    textAlign: "center",
-    padding: 10,
-  },
-
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  settingLabel: { fontSize: 14, color: "#1a1a2e", fontWeight: "500" },
+  settingRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", flex: 1 },
+  toggle: { width: 44, height: 24, borderRadius: 12, justifyContent: "center" },
+  toggleCircle: { width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff" },
+  noDataText: { fontSize: 14, color: "#999", textAlign: "center", padding: 10 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
   modalContent: {
     backgroundColor: "#fff",
-    borderRadius: 16,
+    borderRadius: 20,
     width: "90%",
     maxHeight: "85%",
     elevation: 10,
@@ -717,28 +709,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  modalScroll: {
-    padding: 20,
-  },
-  inputGroup: {
-    marginBottom: 24,
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 10,
-  },
-  pickerContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
+  modalTitle: { fontSize: 18, fontWeight: "bold", color: "#333" },
+  modalScroll: { padding: 20 },
+  inputGroup: { marginBottom: 24 },
+  inputLabel: { fontSize: 16, fontWeight: "600", color: "#333", marginBottom: 10 },
+  pickerContainer: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   pickerOption: {
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -747,21 +722,10 @@ const styles = StyleSheet.create({
     borderColor: "#E5E7EB",
     backgroundColor: "#fff",
   },
-  pickerOptionSelected: {
-    backgroundColor: "#6B46C1",
-    borderColor: "#6B46C1",
-  },
-  pickerText: {
-    color: "#666",
-    fontSize: 14,
-  },
-  pickerTextSelected: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-  stateScroll: {
-    maxHeight: 120,
-  },
+  pickerOptionSelected: { backgroundColor: "#6B46C1", borderColor: "#6B46C1" },
+  pickerText: { color: "#666", fontSize: 14 },
+  pickerTextSelected: { color: "#fff", fontWeight: "600" },
+  stateScroll: { maxHeight: 120 },
   stateChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -772,18 +736,9 @@ const styles = StyleSheet.create({
     marginRight: 8,
     marginBottom: 8,
   },
-  stateChipSelected: {
-    backgroundColor: "#6B46C1",
-    borderColor: "#6B46C1",
-  },
-  stateChipText: {
-    color: "#666",
-    fontSize: 13,
-  },
-  stateChipTextSelected: {
-    color: "#fff",
-    fontWeight: "600",
-  },
+  stateChipSelected: { backgroundColor: "#6B46C1", borderColor: "#6B46C1" },
+  stateChipText: { color: "#666", fontSize: 13 },
+  stateChipTextSelected: { color: "#fff", fontWeight: "600" },
   textInput: {
     borderWidth: 1,
     borderColor: "#E5E7EB",
@@ -800,29 +755,12 @@ const styles = StyleSheet.create({
     borderTopColor: "#E5E7EB",
     gap: 12,
   },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  cancelButton: {
-    backgroundColor: "#f0f0f0",
-  },
-  cancelButtonText: {
-    color: "#666",
-    fontWeight: "600",
-  },
-  saveButton: {
-    backgroundColor: "#6B46C1",
-  },
-  saveButtonDisabled: {
-    backgroundColor: "#ccc",
-  },
-  saveButtonText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
+  modalButton: { flex: 1, paddingVertical: 14, borderRadius: 8, alignItems: "center" },
+  cancelButton: { backgroundColor: "#f0f0f0" },
+  cancelButtonText: { color: "#666", fontWeight: "600" },
+  saveButton: { backgroundColor: "#6B46C1" },
+  saveButtonDisabled: { backgroundColor: "#ccc" },
+  saveButtonText: { color: "#fff", fontWeight: "600" },
 })
 
 export default Profile
