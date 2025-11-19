@@ -10,6 +10,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
@@ -19,352 +20,413 @@ import AsyncStorage from "@react-native-async-storage/async-storage"
 interface Message {
   id: string
   text: string
-  sender: "user" | "admin"
+  sender: "user" | "bot"
   timestamp: string
+  loading?: boolean
 }
 
-const BASE_URL = "https://ilearn.lsfort.ng/"
-const POLL_INTERVAL = 3000 // 3 seconds
+type Language = "en" | "fr" | "ha"
 
-const Support: React.FC = () => {
+const TRANSLATIONS = {
+  en: {
+    chooseLang: "Please choose your language:",
+    contactPrompt: "You're so brave. Please share your **email** and **phone number** (e.g., name@example.com 08012345678)\nA professional will contact you in under 30 minutes.",
+    contactThanks: "Thank you. A professional will contact you shortly.\nYou're not alone. You're strong.",
+    startNew: "Start New Chat",
+  },
+  fr: {
+    chooseLang: "Veuillez choisir votre langue :",
+    contactPrompt: "Vous êtes courageux. Veuillez partager votre **email** et **numéro de téléphone** (ex. nom@exemple.com 08012345678)\nUn professionnel vous contactera sous 30 minutes.",
+    contactThanks: "Merci. Un professionnel vous contactera bientôt.\nVous n'êtes pas seul. Vous êtes fort.",
+    startNew: "Nouvelle conversation",
+  },
+  ha: {
+    chooseLang: "Zaɓi harshenku:",
+    contactPrompt: "Kuna da ƙarfin hali. Da fatan za ku raba **email** da **lambar waya** (misali: sunan@misali.com 08012345678)\nƙwararre zai tuntuɓe ku cikin minti 30.",
+    contactThanks: "Na gode. ƙwararre zai tuntuɓe ku nan ba da jimawa ba.\nBa ku kaɗai ba. Kuna da ƙarfi.",
+    startNew: "Fara Sabon Tattaunawa",
+  },
+}
+
+// === DIRECT GEMINI CALL (NO PHP) ===
+const GEMINI_KEY = "AIzaSyDwxxzhjFQnOT0BH8VoIc31htO6kJJv3h4"
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`
+export default function Support() {
   const router = useRouter()
   const [messages, setMessages] = useState<Message[]>([])
-  const [newMessage, setNewMessage] = useState("")
-  const [isSending, setIsSending] = useState(false)
-  const [username, setUsername] = useState("User")
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [lang, setLang] = useState<Language>("en")
+  const [context, setContext] = useState("")
+  const [showInput, setShowInput] = useState(false)
+  const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
+  const [exchangeCount, setExchangeCount] = useState(0)
 
   const flatListRef = useRef<FlatList>(null)
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
-  const lastMessageIdRef = useRef<string | null>(null)
 
-  // === INITIAL LOAD ===
+  // Load saved session
   useEffect(() => {
     const init = async () => {
-      const userId = await AsyncStorage.getItem("userId")
-      if (!userId) {
-        router.replace("/login")
-        return
+      const saved = await AsyncStorage.getItem("support_session")
+      if (saved) {
+        const { id, messages: m, language, ctx, count } = JSON.parse(saved)
+        setSessionId(id)
+        setLang(language || "en")
+        setContext(ctx || "")
+        setExchangeCount(count || 0)
+        setMessages(m)
+        if (m.length > 1) setShowInput(true)
+      } else {
+        startNewChat()
       }
-
-      // Load username
-      try {
-        const res = await fetch(`${BASE_URL}api/get_user.php`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId }),
-        })
-        const data = await res.json()
-        if (data.success) setUsername(data.username || "User")
-      } catch (e) {}
-
-      // Load messages & start polling
-      await loadMessages()
-      startPolling()
     }
-
     init()
+  }, [])
 
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
+  // Start fresh chat
+  const startNewChat = async () => {
+    const id = `chat-${Date.now()}`
+    setSessionId(id)
+    setLang("en")
+    setContext("")
+    setExchangeCount(0)
+    setShowInput(false)
+    setInput("")
+
+    const msg: Message = {
+      id: `g-${Date.now()}`,
+      text: TRANSLATIONS.en.chooseLang,
+      sender: "bot",
+      timestamp: new Date().toISOString(),
     }
-  }, [router])
-
-  // === POLLING FOR NEW MESSAGES ===
-  const startPolling = () => {
-    intervalRef.current = setInterval(() => {
-      if (!isSending && !isTyping) {
-        loadMessages(true) // silent update
-      }
-    }, POLL_INTERVAL)
+    setMessages([msg])
+    await save(id, [msg], "en", "", 0)
+    scrollToBottom()
   }
 
-  // === LOAD MESSAGES FROM SERVER ===
-  const loadMessages = async (silent = false) => {
-    try {
-      const userId = await AsyncStorage.getItem("userId")
-      if (!userId) return
+  // Language selection
+  const selectLanguage = async (value: Language) => {
+    setLang(value)
+    updateContext(`Language: ${value}`)
 
-      const response = await fetch(`${BASE_URL}api/get_chat_history.php`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
-      })
-      const data = await response.json()
+    const greeting = value === "en"
+      ? "Hi, I'm here to support you. You're safe. How can I help?"
+      : value === "fr"
+      ? "Bonjour, je suis là pour vous soutenir. Vous êtes en sécurité. Comment puis-je aider ?"
+      : "Sannu, ina nan don taimaka muku. Kuna cikin aminci. Yaya zan taimaka?"
 
-      if (data.success && Array.isArray(data.messages)) {
-        const newMessages: Message[] = data.messages.map((m: any) => ({
-          id: String(m.id),
-          text: m.text,
-          sender: m.sender,
-          timestamp: m.timestamp,
-        }))
-
-        if (!silent) {
-          setMessages(newMessages)
-          lastMessageIdRef.current = newMessages[newMessages.length - 1]?.id || null
-          scrollToBottom()
-          return
-        }
-
-        // === SILENT UPDATE: Append only new messages ===
-        if (newMessages.length > messages.length) {
-          const lastId = lastMessageIdRef.current
-          const startIndex = lastId
-            ? newMessages.findIndex((m) => m.id === lastId) + 1
-            : messages.length
-
-          const incoming = newMessages.slice(startIndex)
-          if (incoming.length > 0) {
-            setMessages((prev) => [...prev, ...incoming])
-            lastMessageIdRef.current = newMessages[newMessages.length - 1].id
-            scrollToBottom()
-          }
-        }
-      }
-    } catch (error) {
-      // Silent fail
+    const botMsg: Message = {
+      id: `b-${Date.now()}`,
+      text: greeting,
+      sender: "bot",
+      timestamp: new Date().toISOString(),
     }
+    const updated = [messages[0], botMsg]
+    setMessages(updated)
+    setShowInput(true)
+    await save(sessionId!, updated, value, context, 0)
+    scrollToBottom()
   }
 
-  // === SCROLL TO BOTTOM ===
-  const scrollToBottom = () => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true })
-    }, 100)
+const sendMessage = async () => {
+  if (!input.trim() || isTyping) return
+
+  const userMsg: Message = {
+    id: `u-${Date.now()}`,
+    text: input,
+    sender: "user",
+    timestamp: new Date().toISOString(),
   }
+  const updated = [...messages, userMsg]
+  setMessages(updated)
+  setInput("")
+  await save(sessionId!, updated, lang, context, exchangeCount)
+  scrollToBottom()
 
-  // === SEND MESSAGE ===
-  const sendMessage = async () => {
-    if (!newMessage.trim() || isSending) return
+  const typing: Message = {
+    id: `t-${Date.now()}`,
+    text: "",
+    sender: "bot",
+    timestamp: new Date().toISOString(),
+    loading: true,
+  }
+  setMessages(prev => [...prev, typing])
+  setIsTyping(true)
+  scrollToBottom()
 
-    const userId = await AsyncStorage.getItem("userId")
-    if (!userId) return
+  const systemPrompt = lang === "en"
+    ? "You are SafeSpace Bot, a compassionate, trauma-informed AI in Nigeria. Answer in clear English, under 80 words. Use **bold** for actions. Never give medical advice. If user is in danger, say: Call **112** now."
+    : lang === "fr"
+    ? "Vous êtes SafeSpace Bot, un assistant compatissant. Répondez en français clair, <80 mots. **Gras** pour actions. Urgence : Appelez **112** maintenant."
+    : "Kai SafeSpace Bot ne, mai taimako mai tausayi. Amsa a Hausa mai sauƙi, <80 kalma. **Bold** don ayyuka. Gaggawa: Kirayi **112** yanzu."
 
-    const messageText = newMessage.trim()
-    setNewMessage("")
-    setIsSending(true)
+  const prompt = [
+    { role: "model", parts: [{ text: systemPrompt + "\nContext: " + context }] },
+    { role: "user", parts: [{ text: input }] }
+  ]
 
-    try {
-      const response = await fetch(`${BASE_URL}api/me/reply.php`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          message: messageText,
-          sender: "user",
-        }),
-      })
-      const data = await response.json()
+  try {
+    const res = await fetch(GEMINI_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents: prompt })
+    })
 
-      if (data.success) {
-        // Optimistic UI
-        const tempId = `temp-${Date.now()}`
-        const optimistic: Message = {
-          id: tempId,
-          text: messageText,
-          sender: "user",
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+    const data = await res.json()
+    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "I'm here for you."
+
+    const botMsg: Message = {
+      id: `b-${Date.now()}`,
+      text: reply,
+      sender: "bot",
+      timestamp: new Date().toISOString(),
+    }
+    const final = updated.filter(m => !m.loading).concat(botMsg)
+    setMessages(final)
+    updateContext(`User: ${input} | Bot: ${reply}`)
+    const newCount = exchangeCount + 1
+    setExchangeCount(newCount)
+    await save(sessionId!, final, lang, context, newCount)
+    scrollToBottom()
+
+    if (newCount >= 3 && !final.some(m => m.text.includes("email"))) {
+      setTimeout(() => {
+        const contactMsg: Message = {
+          id: `c-${Date.now()}`,
+          text: TRANSLATIONS[lang].contactPrompt,
+          sender: "bot",
           timestamp: new Date().toISOString(),
         }
-        setMessages((prev) => [...prev, optimistic])
-        lastMessageIdRef.current = tempId
-        scrollToBottom()
-
-        // Sync with server
-        setTimeout(() => loadMessages(), 500)
-      } else {
-        alert(data.error || "Failed to send")
-        setNewMessage(messageText)
-      }
-    } catch (error) {
-      alert("Network error")
-      setNewMessage(messageText)
-    } finally {
-      setIsSending(false)
+        const withContact = [...final, contactMsg]
+        setMessages(withContact)
+        save(sessionId!, withContact, lang, context, newCount)
+      }, 2000)
     }
+  } catch (e: any) {
+    console.error("Direct Gemini error:", e)
+    const errMsg: Message = {
+      id: `e-${Date.now()}`,
+      text: "Sorry, AI is busy. Try again in 10 seconds.",
+      sender: "bot",
+      timestamp: new Date().toISOString(),
+    }
+    const final = updated.filter(m => !m.loading).concat(errMsg)
+    setMessages(final)
+    await save(sessionId!, final, lang, context, exchangeCount)
+    scrollToBottom()
+  } finally {
+    setIsTyping(false)
+  }
+}
+  const updateContext = (info: string) =>
+    setContext(prev => (prev + " | " + info).slice(-1200))
+
+  const save = async (
+    id: string,
+    msgs: Message[],
+    language: Language,
+    ctx: string,
+    count: number
+  ) => {
+    await AsyncStorage.setItem(
+      "support_session",
+      JSON.stringify({
+        id,
+        messages: msgs.filter(m => !m.loading),
+        language,
+        ctx,
+        count,
+      })
+    )
   }
 
-  // === RENDER MESSAGE ===
-  const renderMessage = ({ item }: { item: Message }) => (
-    <View
-      style={[
-        styles.messageContainer,
-        item.sender === "user" ? styles.userMessage : styles.adminMessage,
-      ]}
-    >
-      <Text
-        style={[
-          styles.messageText,
-          item.sender === "user" ? styles.userText : styles.adminText,
-        ]}
-      >
-        {item.text}
-      </Text>
-      <Text style={styles.timestamp}>
-        {new Date(item.timestamp).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })}
-      </Text>
-    </View>
-  )
+  const scrollToBottom = () =>
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100)
+
+  const renderMessage = ({ item }: { item: Message }) => {
+    const isUser = item.sender === "user"
+    const isLangSelect = item.text === TRANSLATIONS.en.chooseLang
+
+    return (
+      <View style={[styles.message, isUser ? styles.user : styles.bot]}>
+        {!isUser && !isLangSelect && (
+          <Text style={styles.botLabel}>SafeSpace Bot</Text>
+        )}
+
+        {item.loading ? (
+          <ActivityIndicator size="small" color="#64748B" />
+        ) : (
+          <Text style={[styles.text, isUser ? styles.userText : styles.botText]}>
+            {item.text}
+          </Text>
+        )}
+
+        {isLangSelect && (
+          <View style={styles.buttons}>
+            {(["en", "fr", "ha"] as Language[]).map((l, i) => (
+              <TouchableOpacity
+                key={i}
+                style={styles.btn}
+                onPress={() => selectLanguage(l)}
+              >
+                <Text style={styles.btnText}>
+                  {l === "en" ? "English" : l === "fr" ? "Français" : "Hausa"}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {!item.loading && (
+          <Text style={styles.time}>
+            {new Date(item.timestamp).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+        )}
+      </View>
+    )
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => router.push("/profile")}
-        >
-          <Ionicons name="arrow-back-outline" size={24} color="#666" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.icon}>
+          <Ionicons name="arrow-back" size={24} color="#555" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Support Chat</Text>
-        <View style={styles.iconButton} />
+        <Text style={styles.title}>SafeSpace</Text>
+        <TouchableOpacity onPress={startNewChat} style={styles.icon}>
+          <Ionicons name="add-circle" size={26} color="#10B981" />
+        </TouchableOpacity>
       </View>
 
-      {/* Welcome */}
-      <View style={styles.chatHeader}>
-        <Text style={styles.welcomeText}>Hi {username},</Text>
-        <Text style={styles.supportText}>How can we help you today?</Text>
-      </View>
+      <FlatList
+        ref={flatListRef}
+        data={messages}
+        renderItem={renderMessage}
+        keyExtractor={i => i.id}
+        style={styles.list}
+        onContentSizeChange={scrollToBottom}
+      />
 
-      {/* Messages */}
-   <FlatList
-  ref={flatListRef}
-  data={messages}
-  renderItem={renderMessage}
-  keyExtractor={(item, index) => {
-    const id = item.id && item.id !== '0' && item.id !== '' 
-      ? item.id 
-      : `msg-${index}-${Date.now()}`;
-    return id;
-  }}
-  style={styles.messagesList}
-  showsVerticalScrollIndicator={false}
-  onContentSizeChange={scrollToBottom}
-  ListEmptyComponent={
-    <View style={styles.emptyChat}>
-      <Ionicons name="chatbubble-outline" size={48} color="#ccc" />
-      <Text style={styles.emptyText}>Start a conversation</Text>
-    </View>
-  }
-/>
-
-      {/* Input */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-      >
-        <View style={styles.inputWrapper}>
-          <TextInput
-            style={styles.textInput}
-            value={newMessage}
-            onChangeText={setNewMessage}
-            onFocus={() => setIsTyping(true)}
-            onBlur={() => setIsTyping(false)}
-            placeholder="Type your message..."
-            multiline
-            maxLength={500}
-            editable={!isSending}
-          />
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              (!newMessage.trim() || isSending) && styles.sendButtonDisabled,
-            ]}
-            onPress={sendMessage}
-            disabled={!newMessage.trim() || isSending}
-          >
-            {isSending ? (
-              <Ionicons name="hourglass-outline" size={20} color="#fff" />
-            ) : (
-              <Ionicons name="send" size={20} color="#fff" />
-            )}
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+      {showInput && (
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View style={styles.inputBox}>
+            <TextInput
+              style={styles.input}
+              placeholder={
+                lang === "en"
+                  ? "Type your message..."
+                  : lang === "fr"
+                  ? "Tapez votre message..."
+                  : "Rubuta sakonku..."
+              }
+              value={input}
+              onChangeText={setInput}
+              onSubmitEditing={sendMessage}
+              returnKeyType="send"
+              editable={!isTyping}
+            />
+            <TouchableOpacity
+              onPress={sendMessage}
+              disabled={isTyping || !input.trim()}
+            >
+              <Ionicons
+                name="send"
+                size={24}
+                color={input.trim() && !isTyping ? "#10B981" : "#94A3B8"}
+              />
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      )}
     </SafeAreaView>
   )
 }
 
+// YOUR EXACT ORIGINAL STYLES
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F7F7F7" },
+  container: { flex: 1, backgroundColor: "#FAFBFD" },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingHorizontal: 16,
+    paddingTop: 50,
+    paddingBottom: 16,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: "#E2E8F0",
   },
-  headerTitle: { fontSize: 20, fontWeight: "bold", color: "#333" },
-  iconButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
+  title: { fontSize: 18, fontWeight: "700", color: "#1E293B" },
+  icon: { padding: 6 },
+  list: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
+  message: {
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 20,
+    maxWidth: "86%",
   },
-  chatHeader: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+  user: { backgroundColor: "#10B981", alignSelf: "flex-end" },
+  bot: {
+    backgroundColor: "#F8FAFC",
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
-  welcomeText: { fontSize: 18, fontWeight: "bold", color: "#333", marginBottom: 5 },
-  supportText: { fontSize: 14, color: "#666" },
-  messagesList: { flex: 1, padding: 16 },
-  messageContainer: {
-    marginBottom: 12,
-    padding: 12,
-    borderRadius: 12,
-    maxWidth: "80%",
+  botLabel: {
+    fontSize: 10,
+    color: "#64748B",
+    fontWeight: "600",
+    marginBottom: 4,
   },
-  userMessage: { backgroundColor: "#6B46C1", alignSelf: "flex-end" },
-  adminMessage: { backgroundColor: "#E5E7EB", alignSelf: "flex-start" },
-  messageText: { fontSize: 14, lineHeight: 20, marginBottom: 4 },
+  text: { fontSize: 15, lineHeight: 21 },
   userText: { color: "#fff" },
-  adminText: { color: "#333" },
-  timestamp: { fontSize: 10, color: "#999", alignSelf: "flex-end" },
-  emptyChat: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  emptyText: { fontSize: 16, color: "#999", marginTop: 8 },
-  inputWrapper: {
+  botText: { color: "#1E293B" },
+  buttons: {
+    marginTop: 10,
+    gap: 8,
     flexDirection: "row",
-    alignItems: "flex-end",
+    flexWrap: "wrap",
+  },
+  btn: {
+    backgroundColor: "#E0E7FF",
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    marginRight: 8,
+  },
+  btnText: { fontSize: 14, color: "#4F46E5", fontWeight: "600" },
+  time: {
+    fontSize: 10,
+    color: "#94A3B8",
+    marginTop: 6,
+    alignSelf: "flex-end",
+  },
+  inputBox: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#fff",
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
+    borderTopColor: "#E2E8F0",
+    gap: 12,
   },
-  textInput: {
+  input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "#CBD5E1",
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    marginRight: 8,
-    fontSize: 16,
-    maxHeight: 100,
+    fontSize: 15,
+    backgroundColor: "#F8FAFC",
   },
-  sendButton: {
-    backgroundColor: "#6B46C1",
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  sendButtonDisabled: { backgroundColor: "#ccc" },
 })
-
-export default Support
